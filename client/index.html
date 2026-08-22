@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplayer 1v1 - Infra (Etapa 1)</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Multiplayer 1v1 — Infraestrutura Basica</h1>
+    <p class="subtitle">Etapa 1: apenas conexao em tempo real entre dois jogadores.</p>
+
+    <section id="connection-status" class="panel">
+      <strong>Status da conexao:</strong> <span id="status-text">desconectado</span>
+    </section>
+
+    <section id="lobby" class="panel">
+      <h2>Sala</h2>
+      <div class="actions">
+        <button id="btn-create-room">Criar sala</button>
+      </div>
+      <div class="actions">
+        <input id="input-room-code" type="text" maxlength="6" placeholder="Codigo da sala" />
+        <button id="btn-join-room">Entrar na sala</button>
+      </div>
+    </section>
+
+    <section id="room-info" class="panel hidden">
+      <h2>Sala atual</h2>
+      <p><strong>Codigo:</strong> <span id="room-code-display">-</span></p>
+      <p><strong>Seu slot:</strong> <span id="player-slot-display">-</span></p>
+      <p><strong>Estado da sala:</strong> <span id="room-state-display">-</span></p>
+      <p><strong>Oponente:</strong> <span id="opponent-status-display">aguardando...</span></p>
+      <!--
+        Etapa 9B — elemento minimo para testar a saida voluntaria da
+        sala (leave_room). Nenhum redesign/animacao nova: mesmo estilo
+        de botao ja usado no restante do lobby.
+      -->
+      <div class="actions">
+        <button id="btn-leave-room">Sair da sala</button>
+      </div>
+    </section>
+
+    <!--
+      Etapa 10D — selecao de musica antes da partida. Interface
+      minima (lista de botoes simples): sem capas, player de audio,
+      waveform ou animacoes — apenas funcionalidade. Visivel enquanto
+      o jogador esta na sala e a partida ainda nao comecou/nao esta
+      em contagem regressiva (o servidor rejeita qualquer selecao
+      fora dessa janela; ver server/music/musicSelectionFlow.js).
+    -->
+    <section id="music-selection-panel" class="panel hidden">
+      <h2>Selecionar musica</h2>
+      <ul id="music-list" class="music-list"></ul>
+      <p id="music-selection-status">Nenhuma musica selecionada (a musica padrao sera usada).</p>
+    </section>
+
+    <section id="match-panel" class="panel hidden">
+      <h2>Partida</h2>
+      <p><strong>Estado da partida:</strong> <span id="match-state-display">-</span></p>
+      <p><strong>Seed:</strong> <span id="match-seed-display">-</span></p>
+      <div id="countdown-display" class="countdown hidden">3</div>
+    </section>
+
+    <section id="test-panel" class="panel hidden">
+      <h2>Teste de comunicacao</h2>
+      <button id="btn-send-test">Enviar teste</button>
+      <ul id="message-log"></ul>
+    </section>
+  </main>
+
+  <section id="game-field" class="game-field hidden">
+    <div class="player-area" id="player-area-1" data-player="player1">
+      <header class="player-header">
+        <span class="player-name" id="player1-name">Jogador 1</span>
+        <div class="player-stats">
+          <span class="player-score" id="player1-score">0</span>
+          <span class="player-combo" id="player1-combo">Combo 0</span>
+        </div>
+      </header>
+
+      <!--
+        3 pistas, uma por lane do NoteEngine (lanes sao 1..3, ver
+        sequenceGenerator.js: Math.floor(random() * noteRange) + 1,
+        com TEST_NOTE_RANGE = 3). Mapeamento: 1=esquerda(<-),
+        2=cima(^), 3=direita(->). Cada .lane-track e a area interna
+        onde as notas serao renderizadas futuramente (ainda vazia
+        nesta etapa).
+      -->
+      <div class="playfield" id="player1-playfield" data-lanes-container>
+        <div class="lane" data-lane="1">
+          <span class="lane-label">1</span>
+          <div class="lane-track" data-lane-track="1"></div>
+        </div>
+        <div class="lane" data-lane="2">
+          <span class="lane-label">2</span>
+          <div class="lane-track" data-lane-track="2"></div>
+        </div>
+        <div class="lane" data-lane="3">
+          <span class="lane-label">3</span>
+          <div class="lane-track" data-lane-track="3"></div>
+        </div>
+      </div>
+
+      <!--
+        Texto curto de julgamento (PERFECT/GOOD/MISS/ERRO), preenchido
+        pelo FeedbackRenderer (Etapa 5B-3B) a partir do resultado que o
+        GameplayEngine ja calcula. Vazio/escondido por padrao.
+      -->
+      <div class="judgement-feedback" id="player1-feedback" aria-hidden="true"></div>
+
+      <!--
+        3 teclas, mesma ordem/indice das lanes acima (1..3), alinhadas
+        em grid identico ao .playfield. Cada botao carrega data-lane
+        (numero passado para GameplayEngine.handleKeyPress(lane,
+        currentTime) via InputController) e data-key com o codigo de
+        tecla fisica correspondente (ArrowLeft/ArrowUp/ArrowRight).
+        Comecam "disabled" no HTML; InputController.bindTouchButtons
+        habilita e liga o toque APENAS no keys-bar do jogador local
+        (ver main.js), entao o bloco do oponente permanece desabilitado
+        e sem listener.
+      -->
+      <div class="keys-bar" id="player1-keys" data-keys-container>
+        <button type="button" class="key-placeholder" data-lane="1" data-key="ArrowLeft" aria-label="Lane 1 - esquerda" disabled>&larr;</button>
+        <button type="button" class="key-placeholder" data-lane="2" data-key="ArrowUp" aria-label="Lane 2 - cima" disabled>&uarr;</button>
+        <button type="button" class="key-placeholder" data-lane="3" data-key="ArrowRight" aria-label="Lane 3 - direita" disabled>&rarr;</button>
+      </div>
+    </div>
+
+    <div class="field-divider" aria-hidden="true"></div>
+
+    <div class="player-area" id="player-area-2" data-player="player2">
+      <header class="player-header">
+        <span class="player-name" id="player2-name">Jogador 2</span>
+        <div class="player-stats">
+          <span class="player-score" id="player2-score">0</span>
+          <span class="player-combo" id="player2-combo">Combo 0</span>
+        </div>
+      </header>
+
+      <div class="playfield" id="player2-playfield" data-lanes-container>
+        <div class="lane" data-lane="1">
+          <span class="lane-label">1</span>
+          <div class="lane-track" data-lane-track="1"></div>
+        </div>
+        <div class="lane" data-lane="2">
+          <span class="lane-label">2</span>
+          <div class="lane-track" data-lane-track="2"></div>
+        </div>
+        <div class="lane" data-lane="3">
+          <span class="lane-label">3</span>
+          <div class="lane-track" data-lane-track="3"></div>
+        </div>
+      </div>
+
+      <div class="judgement-feedback" id="player2-feedback" aria-hidden="true"></div>
+
+      <div class="keys-bar" id="player2-keys" data-keys-container>
+        <button type="button" class="key-placeholder" data-lane="1" data-key="ArrowLeft" aria-label="Lane 1 - esquerda" disabled>&larr;</button>
+        <button type="button" class="key-placeholder" data-lane="2" data-key="ArrowUp" aria-label="Lane 2 - cima" disabled>&uarr;</button>
+        <button type="button" class="key-placeholder" data-lane="3" data-key="ArrowRight" aria-label="Lane 3 - direita" disabled>&rarr;</button>
+      </div>
+    </div>
+  </section>
+
+  <!--
+    ETAPA 5B-4C — Tela visual de resultado da partida.
+    Escondida por padrao. So mostra o resultado do jogador LOCAL --
+    nao ha vencedor/perdedor nem comparacao com o oponente nesta etapa
+    (ver client/js/render/resultRenderer.js). Fica FORA de #game-field
+    de proposito: quando a partida termina, main.js esconde o campo de
+    gameplay (UIController.hideGameField) e ResultRenderer.show() exibe
+    este painel por cima, como uma tela propria.
+  -->
+  <section id="result-screen" class="result-screen hidden" aria-hidden="true">
+    <div class="result-card">
+      <h2 class="result-title">Resultado da Partida</h2>
+
+      <div class="result-grid">
+        <div class="result-stat result-stat-primary">
+          <span class="result-stat-label">Score</span>
+          <span class="result-stat-value" id="result-score">0</span>
+        </div>
+        <div class="result-stat result-stat-primary">
+          <span class="result-stat-label">Precisão</span>
+          <span class="result-stat-value" id="result-accuracy">0.00%</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-label">Maior Combo</span>
+          <span class="result-stat-value" id="result-max-combo">0</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-label">Acertos</span>
+          <span class="result-stat-value" id="result-hits">0</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-label">Misses</span>
+          <span class="result-stat-value" id="result-misses">0</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-label">Erros</span>
+          <span class="result-stat-value" id="result-mistakes">0</span>
+        </div>
+      </div>
+
+      <!--
+        Etapa 5B-5A (Parte 2) — status textual do fluxo de revanche
+        ("Aguardando o outro jogador..." / cancelamento por
+        desconexao). Escondido por padrao; ResultRenderer controla seu
+        texto/visibilidade (setPlayAgainWaiting / showRematchCancelled),
+        sem nenhuma logica de rede aqui.
+      -->
+      <p id="result-rematch-status" class="result-rematch-status hidden" aria-live="polite"></p>
+
+      <div class="result-actions">
+        <button type="button" class="result-btn result-btn-secondary" id="btn-back-to-menu">Voltar ao Menu</button>
+        <button type="button" class="result-btn result-btn-primary" id="btn-play-again">Jogar Novamente</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/config.js"></script>
+  <script src="js/network/socketClient.js"></script>
+  <script src="js/match/sequenceGenerator.js"></script>
+  <script src="js/music/sequenceCatalog.js"></script>
+  <script src="js/music/musicSelectionController.js"></script>
+  <script src="js/match/noteEngine.js"></script>
+  <script src="js/match/playerState.js"></script>
+  <script src="js/match/judgement.js"></script>
+  <script src="js/match/gameplayEngine.js"></script>
+  <script src="js/match/matchController.js"></script>
+  <script src="js/match/matchTimelineManager.js"></script>
+  <script src="js/match/matchEndDetector.js"></script>
+  <script src="js/match/matchResult.js"></script>
+  <script src="js/match/rematchController.js"></script>
+  <script src="js/match/matchAbandonmentController.js"></script>
+  <script src="js/room/leaveRoomController.js"></script>
+  <script src="js/input/inputController.js"></script>
+  <script src="js/render/noteRenderer.js"></script>
+  <script src="js/render/feedbackRenderer.js"></script>
+  <script src="js/render/resultRenderer.js"></script>
+  <script src="js/ui/uiController.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
