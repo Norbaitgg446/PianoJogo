@@ -240,6 +240,19 @@ const UIController = (() => {
     el.opponentStatusDisplay.textContent = 'saiu da sala';
   }
 
+  /**
+   * ETAPA 12A — liga/desliga o modo visual Solo (classe `solo-mode` em
+   * <html>/<body>, mesmo padrao ja usado por `match-active`). So
+   * esconde, via CSS (ver client/css/style.css), o que depende
+   * exclusivamente de um adversario (painel do player2, divisor,
+   * status de oponente) -- nenhum elemento e removido do DOM, e nada
+   * muda para o multiplayer (isSolo=false devolve tudo ao normal).
+   */
+  function setSoloMode(isSolo) {
+    document.documentElement.classList.toggle('solo-mode', Boolean(isSolo));
+    document.body.classList.toggle('solo-mode', Boolean(isSolo));
+  }
+
   const api = {
     setConnectionStatus,
     showRoomJoined,
@@ -257,6 +270,7 @@ const UIController = (() => {
     showOpponentLeftRoom,
     showGameField,
     hideGameField,
+    setSoloMode,
   };
 
   if (isNode) {
