@@ -1,5 +1,5 @@
 const MatchManager = require('./MatchManager');
-const { Match, MATCH_STATE } = require('./Match');
+const { Match, MATCH_STATE, MATCH_MODE } = require('./Match');
 const { generateMatchSequence } = require('./matchSequenceResolver');
 const { generateSeed } = require('../utils/idGenerator');
 const finalMatchState = require('./finalMatchState');
@@ -11,6 +11,14 @@ const {
   DEFAULT_MUSIC_ID,
 } = require('../config');
 const { broadcastToRoom } = require('../ws/broadcast');
+
+// ETAPA 12A: idempotencia do `match_result` do modo Solo (equivalente
+// ao que `matchOutcome.hasFinalOutcome` ja garante para multiplayer).
+// Guardado por INSTANCIA da Match (mesmo padrao de
+// finalMatchState.js/matchOutcome.js) -- uma Match nova (toda revanche
+// Solo cria uma `new Match(...)`, ver startMatchFlow) nunca tem entrada
+// aqui.
+const soloResultsSent = new WeakSet();
 
 /**
  * Normaliza o musicId solicitado para a criacao de uma Match.
@@ -46,9 +54,14 @@ function normalizeRequestedMusicId(requestedMusicId) {
  *   fora do rematch passa isto hoje. Um musicId explicito que nao
  *   exista no musicCatalog e REJEITADO (Error), nunca cai
  *   silenciosamente para outra musica.
+ * @param {string} [mode] - ETAPA 12A: "multiplayer" (default, se
+ *   omitido) ou "solo". Nao muda NADA do pipeline abaixo (seed, musica,
+ *   sequencia, timeline, READY -> COUNTDOWN -> PLAYING) -- so marca
+ *   `match.mode`, para que outras camadas (ex: finishMatch, mais
+ *   abaixo) saibam nao tratar esta partida como um confronto P1 vs P2.
  */
-function startMatchFlow(room, requestedMusicId) {
-  const match = new Match(room.code);
+function startMatchFlow(room, requestedMusicId, mode) {
+  const match = new Match(room.code, mode);
 
   // A seed e definida UMA UNICA VEZ pelo servidor e e a mesma para os dois
   // jogadores -- isso nao muda nesta etapa (Etapa 10A): a musica so diz
@@ -177,13 +190,20 @@ function handleSequenceCheck(room, slot, payload) {
   const player1Report = match._sequenceChecks.player1;
   const player2Report = match._sequenceChecks.player2;
 
+  // ETAPA 12A: no modo Solo nao existe player2 -- hasBothSequenceChecks
+  // ja garante que so chegamos aqui com player1Report preenchido, entao
+  // a comparacao e so contra a sequencia de referencia do servidor.
   const identical =
-    player1Report.checksum === player2Report.checksum &&
-    player1Report.checksum === match._referenceChecksum;
+    match.mode === MATCH_MODE.SOLO
+      ? player1Report.checksum === match._referenceChecksum
+      : player1Report.checksum === player2Report.checksum &&
+        player1Report.checksum === match._referenceChecksum;
 
   console.log(`\n=== VERIFICACAO DE SEQUENCIA (sala ${room.code}) ===`);
   console.log('Player1:', { seed: player1Report.seed, checksum: player1Report.checksum });
-  console.log('Player2:', { seed: player2Report.seed, checksum: player2Report.checksum });
+  if (player2Report) {
+    console.log('Player2:', { seed: player2Report.seed, checksum: player2Report.checksum });
+  }
   console.log('Referencia do servidor:', match._referenceChecksum);
   console.log(identical ? 'Resultado: SEQUENCIAS IDENTICAS ✓' : 'Resultado: SEQUENCIAS DIFERENTES ✗');
   console.log('==========================================\n');
@@ -192,7 +212,7 @@ function handleSequenceCheck(room, slot, payload) {
     type: 'sequence_check_result',
     identical,
     player1Checksum: player1Report.checksum,
-    player2Checksum: player2Report.checksum,
+    player2Checksum: player2Report ? player2Report.checksum : null,
     serverChecksum: match._referenceChecksum,
   });
 }
@@ -266,6 +286,28 @@ function finishMatch(room) {
 
   const snapshot = finalMatchState.captureFinalMatchState(match);
   if (!snapshot) return null;
+
+  // ETAPA 12A: Solo nunca passa por matchOutcome -- nao existe player2
+  // real para comparar, entao NAO chamamos
+  // matchOutcome.determineOutcome/captureFinalOutcome (isso compararia
+  // contra um player2 vazio/fictício e produziria um "vencedor" que nao
+  // deveria existir). O snapshot (score/hits/misses/combo, ja capturado
+  // acima por finalMatchState, reutilizando finalMatchState/
+  // matchResultState exatamente como o multiplayer) e preservado
+  // normalmente -- so o `match_result` enviado ao cliente tem um
+  // formato diferente (sem result/winner/loser), e so a estatistica de
+  // player1.
+  if (match.mode === MATCH_MODE.SOLO) {
+    if (!soloResultsSent.has(match)) {
+      soloResultsSent.add(match);
+      broadcastToRoom(room, {
+        type: 'match_result',
+        mode: MATCH_MODE.SOLO,
+        player1: snapshot.player1,
+      });
+    }
+    return snapshot;
+  }
 
   const hadOutcomeBefore = matchOutcome.hasFinalOutcome(match);
   const outcome = matchOutcome.captureFinalOutcome(match, snapshot);
