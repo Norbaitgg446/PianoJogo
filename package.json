@@ -1,0 +1,53 @@
+{
+  "name": "multiplayer-1v1-infra",
+  "version": "0.1.0",
+  "description": "Infraestrutura basica de multiplayer 1v1 em tempo real (etapa 1: salas + conexao).",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "test:notes": "node tests/noteEngine.test.js",
+    "test:gameplay": "node tests/gameplayEngine.test.js",
+    "test:gameplay-server": "node tests/serverGameplayFlow.test.js",
+    "test:input": "node tests/inputController.test.js",
+    "test:timeline": "node tests/matchTimelineManager.test.js",
+    "test:render": "node tests/noteRenderer.test.js",
+    "test:lane-input": "node tests/laneInputIntegration.test.js",
+    "test:feedback": "node tests/feedbackRenderer.test.js",
+    "test:match-end": "node tests/matchEndDetector.test.js",
+    "test:match-result": "node tests/matchResult.test.js",
+    "test:result-renderer": "node tests/resultRenderer.test.js",
+    "test:rematch": "node tests/rematchFlow.test.js",
+    "test:rematch-client": "node tests/rematchClientIntegration.test.js",
+    "test:match-result-state": "node tests/matchResultState.test.js",
+    "test:final-match-state": "node tests/finalMatchState.test.js",
+    "test:match-flow-finish": "node tests/matchFlowFinish.test.js",
+    "test:match-outcome": "node tests/matchOutcome.test.js",
+    "test:match-result-broadcast": "node tests/matchResultBroadcast.test.js",
+    "test:player-match-state": "node tests/playerMatchState.test.js",
+    "test:gameplay-player-match-state-integration": "node tests/gameplayPlayerMatchStateIntegration.test.js",
+    "test:match-finalization-consistency": "node tests/matchFinalizationConsistency.test.js",
+    "test:match-abandonment": "node tests/matchAbandonment.test.js",
+    "test:match-abandonment-client": "node tests/matchAbandonmentClient.test.js",
+    "test:match-abandonment-flow-consistency": "node tests/matchAbandonmentFlowConsistency.test.js",
+    "test:leave-room": "node tests/leaveRoomFlow.test.js",
+    "test:leave-room-client": "node tests/leaveRoomClient.test.js",
+    "test:leave-room-full-cycle-9c": "node tests/leaveRoomFullCycle9C.test.js",
+    "test:music-catalog": "node tests/musicCatalog.test.js",
+    "test:music-pattern-integration": "node tests/musicPatternIntegration.test.js",
+    "test:match-music-lifecycle": "node tests/matchMusicLifecycle.test.js",
+    "test:music-selection-flow": "node tests/musicSelectionFlow.test.js",
+    "test:music-selection-controller": "node tests/musicSelectionController.test.js",
+    "test:match-configuration-flow-10e": "node tests/matchConfigurationFlow10E.test.js",
+    "test:multiplayer-e2e-10f": "node tests/multiplayerEndToEnd10F.test.js",
+    "test:match-configuration-final-11": "node tests/matchConfigurationFinal11.test.js",
+    "test:gameplay-full-flow-12": "node tests/gameplayFullFlow12.test.js",
+    "test": "npm run test:notes && npm run test:gameplay && npm run test:gameplay-server && npm run test:input && npm run test:timeline && npm run test:render && npm run test:lane-input && npm run test:feedback && npm run test:match-end && npm run test:match-result && npm run test:result-renderer && npm run test:rematch && npm run test:rematch-client && npm run test:match-result-state && npm run test:final-match-state && npm run test:match-flow-finish && npm run test:match-outcome && npm run test:match-result-broadcast && npm run test:player-match-state && npm run test:gameplay-player-match-state-integration && npm run test:match-finalization-consistency && npm run test:match-abandonment && npm run test:match-abandonment-client && npm run test:match-abandonment-flow-consistency && npm run test:leave-room && npm run test:leave-room-client && npm run test:leave-room-full-cycle-9c && npm run test:music-catalog && npm run test:music-pattern-integration && npm run test:match-music-lifecycle && npm run test:music-selection-flow && npm run test:music-selection-controller && npm run test:match-configuration-flow-10e && npm run test:multiplayer-e2e-10f && npm run test:match-configuration-final-11 && npm run test:gameplay-full-flow-12"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
