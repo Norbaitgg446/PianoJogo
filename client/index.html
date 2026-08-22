@@ -24,6 +24,15 @@
         <input id="input-room-code" type="text" maxlength="6" placeholder="Codigo da sala" />
         <button id="btn-join-room">Entrar na sala</button>
       </div>
+      <!--
+        ETAPA 12A — Modo Solo. Mesma tela/estilo de botao do lobby
+        acima; nenhuma pagina nova. O clique dispara `start_solo_match`
+        (ver server/ws/messageRouter.js), que reutiliza integralmente a
+        mesma arquitetura de Room/Match/matchFlow do multiplayer.
+      -->
+      <div class="actions">
+        <button id="btn-play-solo">Jogar Sozinho</button>
+      </div>
     </section>
 
     <section id="room-info" class="panel hidden">
@@ -31,7 +40,13 @@
       <p><strong>Codigo:</strong> <span id="room-code-display">-</span></p>
       <p><strong>Seu slot:</strong> <span id="player-slot-display">-</span></p>
       <p><strong>Estado da sala:</strong> <span id="room-state-display">-</span></p>
-      <p><strong>Oponente:</strong> <span id="opponent-status-display">aguardando...</span></p>
+      <!--
+        ETAPA 12A — esta linha inteira depende exclusivamente de um
+        adversario existir; escondida no modo Solo via
+        UIController.setSoloMode (classe `solo-mode` no body, ver
+        client/css/style.css). Nao removida/alterada para multiplayer.
+      -->
+      <p id="opponent-info-row"><strong>Oponente:</strong> <span id="opponent-status-display">aguardando...</span></p>
       <!--
         Etapa 9B — elemento minimo para testar a saida voluntaria da
         sala (leave_room). Nenhum redesign/animacao nova: mesmo estilo
