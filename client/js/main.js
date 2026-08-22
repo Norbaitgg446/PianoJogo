@@ -5,6 +5,13 @@
  */
 (() => {
   let currentSlot = null;
+  // ETAPA 12A: true assim que o jogador pediu para "Jogar Sozinho"
+  // (otimista, no proprio clique -- ver btn-play-solo abaixo) ate sair
+  // da sala/abandonar. So controla UI (UIController.setSoloMode) e qual
+  // fluxo o botao "Jogar Novamente" usa (start_solo_match, nunca o
+  // handshake multiplayer de rematchController) -- o servidor continua
+  // sendo a UNICA autoridade sobre `match.mode`.
+  let isSoloMode = false;
 
   // Engine de gameplay do jogador LOCAL (Etapa 5B-1). So existe uma
   // instancia aqui -- a deste navegador -- porque cada cliente so
@@ -379,6 +386,10 @@
     musicSelectionController.reset();
 
     currentSlot = null;
+    // ETAPA 12A: de volta ao lobby -- nenhuma sala/partida (solo ou
+    // multiplayer) associada mais.
+    isSoloMode = false;
+    UIController.setSoloMode(false);
     UIController.resetToLobby();
     UIController.logMessage('Voce saiu da sala.');
   }
@@ -443,6 +454,18 @@
   // startMatchGameplay). Enquanto isso, a tela de resultado continua
   // visivel, so com o botao desabilitado e a mensagem de espera.
   ResultRenderer.setOnPlayAgain(() => {
+    // ETAPA 12A: no modo Solo NAO usamos o handshake multiplayer de
+    // rematchController (nao faz sentido negociar prontidao com um
+    // oponente que nao existe) -- pedimos diretamente uma nova partida
+    // Solo, reutilizando a MESMA arquitetura (start_solo_match, ver
+    // server/ws/messageRouter.js#handleStartSoloMatch, que sempre cria
+    // uma Match nova: nova seed/timeline/estado, nunca reaproveita a
+    // anterior). O multiplayer continua usando rematchController
+    // exatamente como antes.
+    if (isSoloMode) {
+      SocketClient.send('start_solo_match');
+      return;
+    }
     rematchController.requestRematch();
   });
 
@@ -531,6 +554,11 @@
         break;
 
       case 'match_ready':
+        // ETAPA 12A: sincroniza o modo visual com a verdade do servidor
+        // (match.mode) -- o servidor e a UNICA autoridade; o clique em
+        // "Jogar Sozinho" so adianta isso de forma otimista.
+        isSoloMode = message.match.mode === 'solo';
+        UIController.setSoloMode(isSoloMode);
         UIController.setMatchState(message.match.state);
         UIController.setMatchSeed(message.match.seed);
         UIController.logMessage('Os dois jogadores estao prontos. Preparando inicio...');
@@ -617,10 +645,17 @@
         NoteRenderer.stop();
         stopExpiredNotesLoop();
         InputController.setLaneHandler(null);
+        // ETAPA 12A: no modo Solo o servidor nao envia result/winner/
+        // loser (nao ha oponente para comparar -- ver
+        // matchFlow.finishMatch) -- so as estatisticas de player1, ja
+        // mostradas pelo resultado local (handleLocalMatchEnd). Nao
+        // mostrar vencedor/perdedor/empate aqui.
         UIController.logMessage(
-          message.result === 'draw'
-            ? 'Resultado oficial do servidor: empate.'
-            : `Resultado oficial do servidor: ${message.winner} venceu.`
+          message.mode === 'solo'
+            ? 'Resultado oficial do servidor confirmado (modo Solo).'
+            : message.result === 'draw'
+              ? 'Resultado oficial do servidor: empate.'
+              : `Resultado oficial do servidor: ${message.winner} venceu.`
         );
         break;
 
@@ -868,6 +903,8 @@
   }
 
   document.getElementById('btn-create-room').addEventListener('click', () => {
+    isSoloMode = false;
+    UIController.setSoloMode(false);
     SocketClient.send('create_room');
   });
 
@@ -877,7 +914,20 @@
       UIController.showError('Informe um codigo de sala.');
       return;
     }
+    isSoloMode = false;
+    UIController.setSoloMode(false);
     SocketClient.send('join_room', { roomCode });
+  });
+
+  // ETAPA 12A: "Jogar Sozinho". So pede ao servidor (start_solo_match) --
+  // reutiliza integralmente o mesmo pipeline de sala/partida do
+  // multiplayer (ver server/ws/messageRouter.js#handleStartSoloMatch).
+  // O modo visual e ligado aqui, de forma otimista; `match_ready` acima
+  // sincroniza com a verdade do servidor assim que ela chegar.
+  document.getElementById('btn-play-solo').addEventListener('click', () => {
+    isSoloMode = true;
+    UIController.setSoloMode(true);
+    SocketClient.send('start_solo_match');
   });
 
   document.getElementById('btn-send-test').addEventListener('click', () => {
