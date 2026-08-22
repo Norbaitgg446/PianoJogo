@@ -1,4 +1,6 @@
 const RoomManager = require('../rooms/RoomManager');
+const MatchManager = require('../match/MatchManager');
+const { MATCH_STATE, MATCH_MODE } = require('../match/Match');
 const matchFlow = require('../match/matchFlow');
 const gameplayFlow = require('../match/gameplayFlow');
 const rematchFlow = require('../match/rematchFlow');
@@ -94,6 +96,76 @@ function handleJoinRoom(ws, message) {
     // revanche) sem um novo pedido explicito do jogador.
     musicSelectionFlow.clearRoomSelection(room.code);
   }
+}
+
+/**
+ * type: 'start_solo_match', musicId?: string (ETAPA 12A)
+ *
+ * O jogador pede para jogar SOZINHO. Reutiliza integralmente a mesma
+ * arquitetura do multiplayer (Room/RoomManager, Match/MatchManager,
+ * matchFlow.startMatchFlow -- mesmo pipeline de musica/seed/sequencia/
+ * timeline, mesmo READY -> COUNTDOWN -> PLAYING) -- a UNICA diferenca e
+ * que a Match criada aqui nunca espera por "player2" e e marcada com
+ * `mode: "solo"` (ver matchFlow.startMatchFlow).
+ *
+ * Dois casos:
+ * - jogador ainda NAO esta em nenhuma sala: cria uma Room nova (mesmo
+ *   `RoomManager.createRoom` de `create_room`), adiciona o jogador como
+ *   player1 e inicia a Match Solo nela;
+ * - jogador ja esta em uma sala Solo cuja ultima Match ja terminou
+ *   (`FINISHED`): e um pedido de "jogar novamente" Solo (ETAPA 12A,
+ *   item 8) -- NAO usa o handshake multiplayer de rematchFlow.js (nao
+ *   faz sentido negociar prontidao com um oponente que nao existe).
+ *   Reaproveita a MESMA sala, mas SEMPRE cria uma Match nova (nunca
+ *   reaproveita a Match/seed/timeline/estado anterior -- ver
+ *   matchFlow.startMatchFlow, que sempre faz `new Match(...)` com nova
+ *   seed).
+ */
+function handleStartSoloMatch(ws, message) {
+  const requestedMusicId = typeof message.musicId === 'string' ? message.musicId : undefined;
+
+  let room;
+  let previousMusicId = null;
+
+  if (ws.roomCode) {
+    room = RoomManager.getRoom(ws.roomCode);
+    if (!room || room.players[ws.slot] !== ws) {
+      return sendError(ws, 'Sala nao existe mais.');
+    }
+
+    const currentMatch = MatchManager.getMatch(room.code);
+    if (currentMatch && currentMatch.mode !== MATCH_MODE.SOLO) {
+      return sendError(ws, 'Voce ja esta em uma sala multiplayer.');
+    }
+    if (currentMatch && currentMatch.state !== MATCH_STATE.FINISHED) {
+      return sendError(ws, 'Ja existe uma partida solo em andamento nesta sala.');
+    }
+
+    // ETAPA 12A (item 8, mesma regra ja usada por rematchFlow.startRematch
+    // para o multiplayer): "se a mesma musica for escolhida novamente,
+    // ela pode ser reutilizada" -- lida da partida anterior ANTES dela
+    // ser removida, nunca do catalogo global. So usada quando o pedido
+    // atual nao trouxe um musicId explicito.
+    previousMusicId = currentMatch ? currentMatch.musicId : null;
+
+    // Nunca reaproveita a Match anterior (nem o timer/seed/estado dela)
+    // -- matchFlow.startMatchFlow abaixo sempre cria uma Match nova.
+    MatchManager.removeMatch(room.code);
+  } else {
+    room = RoomManager.createRoom();
+    const slot = room.addPlayer(ws);
+
+    send(ws, {
+      type: 'room_created',
+      roomCode: room.code,
+      slot,
+      room: room.toPublicJSON(),
+    });
+
+    send(ws, { type: 'music_catalog', musics: musicSelectionFlow.getPublicCatalog() });
+  }
+
+  matchFlow.startMatchFlow(room, requestedMusicId || previousMusicId, MATCH_MODE.SOLO);
 }
 
 /**
@@ -264,6 +336,8 @@ function routeMessage(ws, raw) {
       return handleCreateRoom(ws);
     case 'join_room':
       return handleJoinRoom(ws, message);
+    case 'start_solo_match':
+      return handleStartSoloMatch(ws, message);
     case 'test_message':
       return handleTestMessage(ws, message);
     case 'sequence_check':
