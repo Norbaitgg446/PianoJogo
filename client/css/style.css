@@ -25,6 +25,19 @@ body.match-active {
   padding: 0;
 }
 
+/*
+  ETAPA 12A — Modo Solo: esconde elementos que dependem exclusivamente
+  de um adversario existir (painel do player2 no campo de jogo, divisor
+  entre os dois campos, status de oponente no painel de sala). Nada
+  aqui e removido/alterado para o multiplayer -- so escondido enquanto
+  `body.solo-mode` estiver presente (ver UIController.setSoloMode).
+*/
+body.solo-mode #player-area-2,
+body.solo-mode .field-divider,
+body.solo-mode #opponent-info-row {
+  display: none;
+}
+
 .container {
   max-width: 560px;
   margin: 0 auto;
