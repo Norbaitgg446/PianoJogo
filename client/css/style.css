@@ -1,0 +1,656 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #0f1117;
+  color: #eaeaea;
+  margin: 0;
+  padding: 24px;
+}
+
+/* Enquanto a partida esta em tela, ninguem deve poder rolar a pagina. */
+html.match-active,
+body.match-active {
+  overflow: hidden;
+  height: 100%;
+}
+
+body.match-active {
+  padding: 0;
+}
+
+.container {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: #9aa0aa;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.panel {
+  background: #1a1d27;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+button {
+  background: #3d7eff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  background: #2f68d9;
+}
+
+button:disabled {
+  background: #444a58;
+  cursor: not-allowed;
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #2a2e3a;
+  background: #0f1117;
+  color: #eaeaea;
+  text-transform: uppercase;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Etapa 10D — lista simples de selecao de musica: sem capas, sem
+   player de audio, sem animacoes. Reaproveita o mesmo estilo de
+   botao ja usado no resto do projeto. */
+.music-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.music-list li button {
+  width: 100%;
+  text-align: left;
+  background: #2a2e3a;
+}
+
+.music-list li button.selected {
+  background: #3d7eff;
+}
+
+.music-list li button:disabled {
+  background: #444a58;
+}
+
+.countdown {
+  font-size: 3rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 12px 0;
+  color: #3d7eff;
+}
+
+#message-log {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+#message-log li {
+  padding: 6px 8px;
+  border-bottom: 1px solid #2a2e3a;
+  font-size: 0.9rem;
+}
+
+/* ==========================================================
+   ETAPA 5A-1 — Estrutura responsiva do campo de jogo
+   Apenas layout/estrutura. Sem notas, animacoes ou som.
+   ========================================================== */
+
+.game-field {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 2px 1fr;
+  grid-template-rows: 1fr;
+  background: #05060a;
+  overflow: hidden;
+}
+
+.game-field.hidden {
+  display: none;
+}
+
+.field-divider {
+  background: #2a2e3a;
+}
+
+/* Telas verticais (celular em pe): jogadores empilhados. */
+@media (orientation: portrait) {
+  .game-field {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 2px 1fr;
+  }
+}
+
+.player-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px;
+  gap: 8px;
+}
+
+.player-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.player-score {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.player-combo {
+  font-size: 0.85rem;
+  color: #9aa0aa;
+}
+
+/* Placeholder para o campo de jogo (pistas).
+   IMPORTANTE PARA O ALINHAMENTO: o "cartao" visual (fundo/borda) fica
+   num ::before absoluto, para que a caixa do grid em si nao tenha
+   border proprio. Isso garante que .playfield e .keys-bar (mesmo
+   numero de colunas, mesmo gap, mesma largura de container) calculem
+   EXATAMENTE as mesmas 3 colunas -- sem isso, o border do .playfield
+   deslocaria as pistas alguns pixels em relacao as teclas. */
+.playfield {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.playfield::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #12141c;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* Uma pista = uma lane do NoteEngine (lane vai de 1 a 3, ver
+   sequenceGenerator.js). data-lane no HTML precisa bater com
+   note.lane usado por Judgement.findJudgeableNote / GameplayEngine.
+   Mapeamento: 1=esquerda, 2=cima, 3=direita. */
+.lane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid #2a2e3a;
+}
+
+.lane:first-child {
+  border-left: none;
+}
+
+/* Identificador visual da lane (so para conferencia/debug nesta
+   etapa; nao e usado por nenhuma logica). */
+.lane-label {
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 4px 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #565c6b;
+}
+
+/* Area interna onde as notas serao renderizadas futuramente. Vazia
+   de proposito nesta etapa -- soh o espaco reservado, flexivel,
+   sem posicoes fixas em pixel. */
+.lane-track {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+/* Teclas de cada jogador, mesma grade (3 colunas, mesmo gap) do
+   .playfield acima, garantindo alinhamento pista <-> tecla em
+   qualquer resolucao. */
+.keys-bar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+/* Cada botao ja recebe data-lane (1..3) e data-key (ArrowLeft/
+   ArrowUp/ArrowRight), pronto para futuramente chamar
+   GameplayEngine.handleKeyPress(lane, currentTime). Nenhum
+   listener e adicionado nesta etapa. */
+.key-placeholder {
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+  text-align: center;
+  min-height: 48px;
+  padding: 8px 0;
+  background: #1a1d27;
+  border: 1px solid #2a2e3a;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: #9aa0aa;
+  touch-action: manipulation;
+}
+
+/* disabled nesta etapa (sem integracao com GameplayEngine ainda) --
+   estilo neutro, so pra nao parecer um botao "quebrado". */
+.key-placeholder:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+/* Telas bem baixas (celular horizontal, notebook com pouca altura):
+   reduz um pouco os espacamentos para evitar overflow vertical. */
+@media (max-height: 420px) {
+  .player-area {
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .key-placeholder {
+    padding: 4px 0;
+  }
+}
+
+/* ==========================================================
+   ETAPA 5B-2B — Renderizacao e movimento das notas
+   Apenas visual: posicionamento/DOM. Nenhuma logica de
+   julgamento, pontuacao ou combo mora aqui.
+   ========================================================== */
+
+/* Marcador da area onde a nota sera futuramente julgada (PERFECT/
+   GOOD/MISS). So um retangulo estatico -- sem nenhum efeito de
+   acerto/erro nesta etapa. Fica dentro da .lane-track, que ja e
+   position:relative. */
+.hit-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14%;
+  border-top: 2px solid #3d7eff;
+  background: rgba(61, 126, 255, 0.08);
+  pointer-events: none;
+}
+
+/* Uma nota caindo. Posicionada via `top` (em % da altura da
+   lane-track, calculado em JS a cada frame com base no relogio
+   sincronizado da partida) + translateY(-50%) para centralizar o
+   bloco exatamente na posicao calculada. Visual simples de
+   proposito: sem particulas, glow ou skins nesta etapa. */
+.falling-note {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 7%;
+  min-height: 14px;
+  background: #eaeaea;
+  border: 2px solid #3d7eff;
+  border-radius: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* Efeito leve e transitorio numa nota especifica (Etapa 5B-3B, item 8),
+   aplicado pelo FeedbackRenderer via classList -- o NoteRenderer
+   continua sendo o unico responsavel por criar/posicionar/remover o
+   elemento em si. Sem particulas, so uma transicao rapida. */
+.falling-note.note-flash-hit {
+  transform: translateY(-50%) scale(1.18);
+  border-color: #eaeaea;
+  background: #3d7eff;
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.falling-note.note-flash-miss {
+  opacity: 0.3;
+  transition: opacity 180ms ease;
+}
+
+/* ==========================================================
+   ETAPA 5B-3B — Feedback visual dos julgamentos
+   So exibicao: le PERFECT/GOOD/MISS/MISTAKE, score e combo ja
+   calculados por GameplayEngine/PlayerState. Nenhuma logica de
+   julgamento/pontuacao/combo mora aqui.
+   ========================================================== */
+
+/* Texto curto de julgamento, perto da keys-bar do proprio jogador.
+   Escondido por padrao (opacity 0); FeedbackRenderer alterna a classe
+   `is-visible` e o proprio texto/estilo por resultado. */
+.judgement-feedback {
+  flex: 0 0 auto;
+  text-align: center;
+  min-height: 1.4em;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transform: translateY(4px) scale(0.9);
+  transition: opacity 150ms ease, transform 150ms ease;
+  pointer-events: none;
+}
+
+.judgement-feedback.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.judgement-feedback.judgement-perfect {
+  color: #3d7eff;
+}
+
+.judgement-feedback.judgement-good {
+  color: #4cd07a;
+}
+
+.judgement-feedback.judgement-miss {
+  color: #ff5d5d;
+}
+
+.judgement-feedback.judgement-mistake {
+  color: #ffb84c;
+}
+
+/* Combo escondido quando quebrado (combo 0) -- reaproveita a classe
+   `.hidden` ja existente no resto do projeto, nenhuma classe nova de
+   visibilidade. */
+.player-combo.hidden {
+  display: none;
+}
+
+/* ==========================================================
+   ETAPA 5B-4C — Tela visual de resultado da partida
+   Apenas apresentacao: le os valores que MatchResult ja calcula
+   (via ResultRenderer). Nenhuma logica de jogo mora aqui.
+   ========================================================== */
+
+/* Trava o scroll da pagina enquanto a tela de resultado esta visivel,
+   mesma tecnica ja usada por `match-active` (ver uiController.js),
+   com nome proprio para nao interferir na logica existente. */
+html.result-active,
+body.result-active {
+  overflow: hidden;
+  height: 100%;
+}
+
+body.result-active {
+  padding: 0;
+}
+
+.result-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 6, 10, 0.92);
+  overflow-y: auto;
+  /* Nunca permite scroll horizontal, em nenhuma resolucao. */
+  overflow-x: hidden;
+}
+
+.result-screen.hidden {
+  display: none;
+}
+
+.result-card {
+  width: 100%;
+  max-width: 640px;
+  box-sizing: border-box;
+  background: #1a1d27;
+  border: 1px solid #2a2e3a;
+  border-radius: 14px;
+  padding: 28px 24px;
+  margin: auto;
+  /* Animacao leve de entrada do painel -- so uma vez, sem loop. */
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.result-screen.is-visible .result-card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.result-title {
+  margin: 0 0 20px;
+  text-align: center;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.result-stat {
+  min-width: 0;
+  background: #12141c;
+  border: 1px solid #2a2e3a;
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  /* Numeros "surgem" suavemente logo depois do painel (mesma
+     transicao, com um pequeno atraso escalonado abaixo). */
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.result-screen.is-visible .result-stat {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Atraso curto e escalonado por posicao, so um leve efeito de
+   "cascata" -- nada de particulas ou animacao continua. */
+.result-stat:nth-child(1) { transition-delay: 40ms; }
+.result-stat:nth-child(2) { transition-delay: 80ms; }
+.result-stat:nth-child(3) { transition-delay: 120ms; }
+.result-stat:nth-child(4) { transition-delay: 160ms; }
+.result-stat:nth-child(5) { transition-delay: 200ms; }
+.result-stat:nth-child(6) { transition-delay: 240ms; }
+
+.result-stat-primary {
+  grid-column: span 3;
+  background: #161a24;
+  border-color: #3d7eff;
+}
+
+.result-stat-label {
+  font-size: 0.78rem;
+  color: #9aa0aa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.result-stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #eaeaea;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.result-stat-primary .result-stat-value {
+  font-size: 1.9rem;
+  color: #3d7eff;
+}
+
+.result-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.result-rematch-status {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #9aa0ac;
+}
+
+.result-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.result-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 46px;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.result-btn-primary {
+  background: #3d7eff;
+  color: #fff;
+}
+
+.result-btn-primary:hover {
+  background: #2f68d9;
+}
+
+.result-btn-secondary {
+  background: #262a37;
+  color: #eaeaea;
+  border: 1px solid #2a2e3a;
+}
+
+.result-btn-secondary:hover {
+  background: #2f3442;
+}
+
+/* Duas colunas para os cards principais (Score/Precisao) em telas
+   estreitas continuam ocupando a largura toda; os secundarios usam 3
+   colunas no desktop e 2 no celular, para nunca cortar/estourar texto. */
+@media (max-width: 480px) {
+  .result-card {
+    padding: 22px 16px;
+  }
+
+  .result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-stat-primary {
+    grid-column: span 2;
+  }
+
+  .result-actions {
+    flex-direction: column;
+  }
+}
+
+/* Telas bem baixas (celular horizontal): reduz espacamentos para
+   evitar overflow vertical, mesmo padrao ja usado em .player-area. */
+@media (max-height: 420px) {
+  .result-card {
+    padding: 16px;
+  }
+
+  .result-title {
+    margin-bottom: 12px;
+  }
+
+  .result-grid {
+    margin-bottom: 14px;
+  }
+}
