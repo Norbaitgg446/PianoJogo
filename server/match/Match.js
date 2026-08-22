@@ -13,10 +13,25 @@ const MATCH_STATE = {
  * mas ja reserva a estrutura que as proximas etapas vao preencher
  * (musica, notas, seed, pontuacao, combo, vida).
  */
+// Modos possiveis de uma Match (ETAPA 12A).
+// "multiplayer" e o valor padrao (comportamento inalterado de todas as
+// etapas anteriores) -- "solo" e usado exclusivamente pelo fluxo
+// start_solo_match (ver server/match/matchFlow.js), que reutiliza esta
+// MESMA classe/estrutura, apenas com player2 nunca preenchido.
+const MATCH_MODE = {
+  MULTIPLAYER: 'multiplayer',
+  SOLO: 'solo',
+};
+
 class Match {
-  constructor(roomCode) {
+  constructor(roomCode, mode) {
     this.roomCode = roomCode;
     this.state = MATCH_STATE.WAITING_FOR_PLAYER;
+
+    // ETAPA 12A: modo da partida. Default "multiplayer" -- obrigatorio
+    // para nao quebrar nenhuma partida existente. So "solo" (ver
+    // matchFlow.startMatchFlow) muda esse valor.
+    this.mode = mode === MATCH_MODE.SOLO ? MATCH_MODE.SOLO : MATCH_MODE.MULTIPLAYER;
 
     // Timestamp (epoch ms, definido pelo servidor) em que a partida deve comecar.
     // E o unico horario que os dois clientes devem usar para sincronizar o inicio.
@@ -89,7 +104,17 @@ class Match {
     this._sequenceChecks[slot] = payload;
   }
 
+  /**
+   * ETAPA 12A: no modo Solo so existe player1 -- entao o "teste de
+   * igualdade de sequencia" (pensado para comparar P1 vs P2) so precisa
+   * do relatorio de player1 para ser considerado completo. Nenhuma
+   * mudanca de comportamento para o modo multiplayer (continua exigindo
+   * os dois).
+   */
   hasBothSequenceChecks() {
+    if (this.mode === MATCH_MODE.SOLO) {
+      return Boolean(this._sequenceChecks.player1);
+    }
     return Boolean(this._sequenceChecks.player1 && this._sequenceChecks.player2);
   }
 
@@ -101,6 +126,7 @@ class Match {
     return {
       roomCode: this.roomCode,
       state: this.state,
+      mode: this.mode,
       startTimestamp: this.startTimestamp,
       seed: this.seed,
       song: this.song,
@@ -113,4 +139,4 @@ class Match {
   }
 }
 
-module.exports = { Match, MATCH_STATE };
+module.exports = { Match, MATCH_STATE, MATCH_MODE };
