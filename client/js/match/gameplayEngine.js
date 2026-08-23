@@ -35,12 +35,26 @@ const GameplayEngine = (() => {
    * @param {object} options
    * @param {Array} options.timeline - timeline de notas (gerada pelo NoteEngine)
    * @param {object} options.playerState - estado DESTE jogador (PlayerState.createPlayerState())
-   * @param {{perfectMs:number, goodMs:number}} options.windows - janelas de julgamento
-   * @param {{PERFECT:number, GOOD:number, MISS:number}} options.scoreValues
+   * @param {{perfectMs:number, greatMs?:number, goodMs:number}} options.windows - janelas de julgamento
+   * @param {{PERFECT:number, GREAT?:number, GOOD:number, MISS:number}} options.scoreValues
    * @param {(type:string, payload:object) => void} [options.sendEvent] - callback de rede (ex: SocketClient.send)
+   * @param {Array<{minCombo:number, multiplier:number}>} [options.comboMultiplierTiers] - ETAPA 13C,
+   *   ex: ClientConfig.COMBO_MULTIPLIER.TIERS. Omitido => multiplicador sempre 1 (igual a antes).
+   * @param {{MISTAKE?:number, MISS?:number}} [options.penalties] - ETAPA 13C, ex:
+   *   ClientConfig.PENALTIES. Omitido => nenhuma penalizacao de pontos (igual a antes).
    */
-  function createGameplayEngine({ timeline, playerState, windows, scoreValues, sendEvent }) {
+  function createGameplayEngine({
+    timeline,
+    playerState,
+    windows,
+    scoreValues,
+    sendEvent,
+    comboMultiplierTiers,
+    penalties,
+  }) {
     const emit = typeof sendEvent === 'function' ? sendEvent : () => {};
+    const mistakePenalty = penalties && penalties.MISTAKE;
+    const missPenalty = penalties && penalties.MISS;
 
     /**
      * Processa uma tentativa de acerto do jogador.
@@ -54,7 +68,7 @@ const GameplayEngine = (() => {
       if (!candidate) {
         // Tecla errada (sem nenhuma nota candidata naquela lane) ou
         // dentro da lane certa porem fora de qualquer janela valida.
-        PlayerStateRef.registerMistake(playerState);
+        PlayerStateRef.registerMistake(playerState, mistakePenalty);
         return { outcome: 'MISTAKE', lane, noteId: null, judgement: null };
       }
 
@@ -66,7 +80,7 @@ const GameplayEngine = (() => {
       // retorna false e nao aplicamos nada duas vezes.
       const applied = NoteEngineRef.setNoteState(timeline, candidate.id, NoteEngineRef.NOTE_STATE.HIT);
       if (!applied) {
-        PlayerStateRef.registerMistake(playerState);
+        PlayerStateRef.registerMistake(playerState, mistakePenalty);
         return {
           outcome: 'MISTAKE',
           lane,
@@ -76,7 +90,7 @@ const GameplayEngine = (() => {
         };
       }
 
-      PlayerStateRef.registerHit(playerState, judgement, scoreValues);
+      PlayerStateRef.registerHit(playerState, judgement, scoreValues, comboMultiplierTiers);
 
       emit('note_hit', {
         noteId: candidate.id,
@@ -112,7 +126,7 @@ const GameplayEngine = (() => {
       );
 
       newlyMissed.forEach((note) => {
-        PlayerStateRef.registerMiss(playerState);
+        PlayerStateRef.registerMiss(playerState, missPenalty);
         emit('note_miss', {
           noteId: note.id,
           lane: note.lane,
