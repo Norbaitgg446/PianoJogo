@@ -38,6 +38,25 @@ body.solo-mode #opponent-info-row {
   display: none;
 }
 
+/*
+  ETAPA 14C — Modo "Jogar contra Bot": reaproveita a MESMA area visual
+  do adversario humano (#player-area-2/.field-divider) para mostrar o
+  Bot. Por baixo, este modo reutiliza o pipeline do Solo (ver
+  index.html/main.js), entao `body.solo-mode` tambem fica presente ao
+  mesmo tempo que `body.bot-mode` -- as regras abaixo SOBRESCREVEM
+  apenas a ocultacao acima (nunca alteram o comportamento do Solo
+  puro, que continua sem a classe `bot-mode`). `#opponent-info-row`
+  (painel de SALA, fora do campo de jogo) continua escondido: nao ha
+  "sala"/status de conexao de Bot para mostrar ali.
+*/
+body.bot-mode #player-area-2 {
+  display: flex !important;
+}
+
+body.bot-mode .field-divider {
+  display: block !important;
+}
+
 .container {
   max-width: 560px;
   margin: 0 auto;
@@ -355,7 +374,7 @@ input[type="text"] {
   position: absolute;
   left: 0;
   right: 0;
-  height: 14%;
+  height: 4%;
   border-top: 2px solid #3d7eff;
   background: rgba(61, 126, 255, 0.08);
   pointer-events: none;
@@ -425,6 +444,10 @@ input[type="text"] {
 
 .judgement-feedback.judgement-perfect {
   color: #3d7eff;
+}
+
+.judgement-feedback.judgement-great {
+  color: #7ad0ff;
 }
 
 .judgement-feedback.judgement-good {
@@ -504,10 +527,67 @@ body.result-active {
 }
 
 .result-title {
-  margin: 0 0 20px;
+  margin: 0 0 12px;
   text-align: center;
   font-size: 1.3rem;
   letter-spacing: 0.02em;
+}
+
+/* ETAPA 13F — PARTE 2: bloco de vencedor/perdedor/empate (Multiplayer
+   apenas -- ver ResultRenderer.setMatchOutcome/clearMatchOutcome). No
+   Solo/Modo Teste, main.js nunca chama setMatchOutcome com um valor,
+   entao este bloco permanece com a classe `.hidden` (regra abaixo) o
+   tempo todo. */
+.result-outcome {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid #2a2e3a;
+}
+
+.result-outcome.hidden {
+  display: none;
+}
+
+.result-outcome-win {
+  background: rgba(66, 209, 128, 0.14);
+  border-color: rgba(66, 209, 128, 0.45);
+  color: #42d180;
+}
+
+.result-outcome-lose {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.45);
+  color: #ff6b6b;
+}
+
+.result-outcome-draw {
+  background: rgba(255, 200, 87, 0.14);
+  border-color: rgba(255, 200, 87, 0.45);
+  color: #ffc857;
+}
+
+/* Estatistica escondida por compatibilidade (Etapa 13F — PARTE 2: ver
+   comentario no HTML sobre #result-hits) -- nao ocupa espaco visual,
+   mas continua no DOM e continua sendo atualizada normalmente pelo
+   ResultRenderer, sem afetar leitores de tela (fora do fluxo, sem
+   `display:none`, que alguns leitores tratam de forma inconsistente
+   junto de `aria-hidden`). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .result-grid {
@@ -548,12 +628,35 @@ body.result-active {
 .result-stat:nth-child(4) { transition-delay: 160ms; }
 .result-stat:nth-child(5) { transition-delay: 200ms; }
 .result-stat:nth-child(6) { transition-delay: 240ms; }
+.result-stat:nth-child(7) { transition-delay: 280ms; }
+.result-stat:nth-child(8) { transition-delay: 320ms; }
+.result-stat:nth-child(9) { transition-delay: 360ms; }
 
 .result-stat-primary {
   grid-column: span 3;
   background: #161a24;
   border-color: #3d7eff;
 }
+
+/* ETAPA 13F — PARTE 2: cada julgamento com um leve acento de cor na
+   borda, so para diferenciar visualmente os cinco cards de julgamento
+   (PERFECT/GREAT/GOOD/ERRO/MISS) -- o restante do card (fundo,
+   tamanho, tipografia) continua o MESMO estilo `.result-stat` de
+   sempre, nenhum estilo novo e criado do zero. */
+.result-stat-perfect { border-color: #ffd166; }
+.result-stat-perfect .result-stat-value { color: #ffd166; }
+
+.result-stat-great { border-color: #3d7eff; }
+.result-stat-great .result-stat-value { color: #6fa1ff; }
+
+.result-stat-good { border-color: #42d180; }
+.result-stat-good .result-stat-value { color: #42d180; }
+
+.result-stat-erro { border-color: #ff6b6b; }
+.result-stat-erro .result-stat-value { color: #ff6b6b; }
+
+.result-stat-miss { border-color: #9aa0aa; }
+.result-stat-miss .result-stat-value { color: #9aa0aa; }
 
 .result-stat-label {
   font-size: 0.78rem;
@@ -579,6 +682,46 @@ body.result-active {
 .result-stat-primary .result-stat-value {
   font-size: 1.9rem;
   color: #3d7eff;
+}
+
+/* ETAPA 14C — PARTE 2: bloco "RESULTADO DA PARTIDA" do modo Bot (ver
+   ResultRenderer.showBotMatchResult/hideBotMatchResult). Reaproveita
+   integralmente `.result-grid`/`.result-stat`/`.result-stat-primary` ja
+   existentes (mesmo estilo dos cards de Pontos/Precisao acima) -- so um
+   titulo de secao proprio e um espacamento antes do bloco. */
+.result-section-title {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9aa0aa;
+}
+
+.result-bot-block {
+  margin-top: 4px;
+  margin-bottom: 24px;
+}
+
+.result-bot-block.hidden {
+  display: none;
+}
+
+.result-bot-block .result-grid-bot {
+  margin-bottom: 0;
+}
+
+/* ETAPA 14D — PARTE 2C: rotulo de dificuldade do Bot, dentro do MESMO
+   bloco "Resultado da Partida" acima -- so tipografia, nenhum layout
+   novo. */
+.result-bot-difficulty {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #9aa0aa;
 }
 
 .result-actions {
