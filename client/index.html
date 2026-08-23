@@ -33,6 +33,45 @@
       <div class="actions">
         <button id="btn-play-solo">Jogar Sozinho</button>
       </div>
+      <!--
+        ETAPA 14C — Modo "Jogar contra Bot". Botao SEPARADO de "Jogar
+        Sozinho" acima -- nao e uma variacao dele. Por baixo, o clique
+        reaproveita o MESMO pipeline de partida (start_solo_match, ver
+        client/js/main.js), pelo mesmo motivo que o Modo Teste ja
+        reaproveita esse pipeline hoje: e o unico jeito ja existente de
+        obter seed/timeline sincronizadas sem inventar um sistema de
+        rede novo. O que torna este um modo PROPRIO (nao uma
+        transformacao do Solo) e o estado independente `isBotMode` em
+        main.js, que liga BotMatchController (ja existente desde a
+        Etapa 14B) durante a partida.
+      -->
+      <div class="actions">
+        <button id="btn-play-bot">Jogar contra Bot</button>
+      </div>
+    </section>
+
+    <!--
+      ETAPA 14D — PARTE 2B: selecao de dificuldade do Bot. Aberta pelo
+      clique em "btn-play-bot" acima, que a partir desta parte NAO
+      inicia mais a partida diretamente -- so mostra este painel.
+      Escondido por padrao (mesmo padrao hidden/panel ja usado no
+      resto do lobby, ex: music-selection-panel). As tres opcoes so
+      escolhem um IDENTIFICADOR ("EASY"/"MEDIUM"/"HARD", ver
+      ClientConfig.BOT_DIFFICULTY em client/js/config.js) e repassam
+      para o sistema de Bot ja existente (Partes 1 e 2A) -- nenhum
+      sistema de Bot novo e criado aqui. "Cancelar" so fecha este
+      painel, sem iniciar partida nenhuma (ver client/js/main.js).
+    -->
+    <section id="bot-difficulty-panel" class="panel hidden">
+      <h2>Escolha a dificuldade</h2>
+      <div class="actions">
+        <button id="btn-bot-difficulty-easy" data-difficulty="EASY">🟢 Fácil</button>
+        <button id="btn-bot-difficulty-medium" data-difficulty="MEDIUM">🟡 Médio</button>
+        <button id="btn-bot-difficulty-hard" data-difficulty="HARD">🔴 Difícil</button>
+      </div>
+      <div class="actions">
+        <button id="btn-bot-difficulty-cancel">Cancelar</button>
+      </div>
     </section>
 
     <section id="room-info" class="panel hidden">
@@ -180,42 +219,112 @@
   </section>
 
   <!--
-    ETAPA 5B-4C — Tela visual de resultado da partida.
-    Escondida por padrao. So mostra o resultado do jogador LOCAL --
-    nao ha vencedor/perdedor nem comparacao com o oponente nesta etapa
-    (ver client/js/render/resultRenderer.js). Fica FORA de #game-field
-    de proposito: quando a partida termina, main.js esconde o campo de
+    ETAPA 5B-4C / 13F — Tela visual de resultado da partida.
+    Escondida por padrao. So mostra o resultado do jogador LOCAL (ver
+    client/js/render/resultRenderer.js). Fica FORA de #game-field de
+    proposito: quando a partida termina, main.js esconde o campo de
     gameplay (UIController.hideGameField) e ResultRenderer.show() exibe
     este painel por cima, como uma tela propria.
+
+    ETAPA 13F — PARTE 2: alem do score/precisao/combo ja existentes,
+    agora mostra a contagem detalhada de PERFECT/GREAT/GOOD/ERRO/MISS e
+    o maior multiplicador atingido (mesmos dados que MatchResult ja
+    calcula desde a Parte 1 -- nenhuma estatistica nova). O bloco
+    #result-outcome mostra vencedor/perdedor/empate SOMENTE no
+    Multiplayer -- main.js so o preenche quando `match_result` (Etapa
+    12, servidor) traz result/winner/loser; no Solo e no Modo Teste ele
+    nunca e chamado, e permanece escondido (ver setMatchOutcome em
+    resultRenderer.js).
   -->
   <section id="result-screen" class="result-screen hidden" aria-hidden="true">
     <div class="result-card">
-      <h2 class="result-title">Resultado da Partida</h2>
+      <h2 class="result-title">Resultado</h2>
+
+      <p id="result-outcome" class="result-outcome hidden" aria-live="polite"></p>
 
       <div class="result-grid">
         <div class="result-stat result-stat-primary">
-          <span class="result-stat-label">Score</span>
+          <span class="result-stat-label">Pontos</span>
           <span class="result-stat-value" id="result-score">0</span>
         </div>
         <div class="result-stat result-stat-primary">
           <span class="result-stat-label">Precisão</span>
           <span class="result-stat-value" id="result-accuracy">0.00%</span>
         </div>
+
+        <div class="result-stat result-stat-perfect">
+          <span class="result-stat-label">Perfect</span>
+          <span class="result-stat-value" id="result-perfect">0</span>
+        </div>
+        <div class="result-stat result-stat-great">
+          <span class="result-stat-label">Great</span>
+          <span class="result-stat-value" id="result-great">0</span>
+        </div>
+        <div class="result-stat result-stat-good">
+          <span class="result-stat-label">Good</span>
+          <span class="result-stat-value" id="result-good">0</span>
+        </div>
+        <div class="result-stat result-stat-erro">
+          <span class="result-stat-label">Erro</span>
+          <span class="result-stat-value" id="result-mistakes">0</span>
+        </div>
+        <div class="result-stat result-stat-miss">
+          <span class="result-stat-label">Miss</span>
+          <span class="result-stat-value" id="result-misses">0</span>
+        </div>
+
         <div class="result-stat">
           <span class="result-stat-label">Maior Combo</span>
           <span class="result-stat-value" id="result-max-combo">0</span>
         </div>
         <div class="result-stat">
-          <span class="result-stat-label">Acertos</span>
-          <span class="result-stat-value" id="result-hits">0</span>
+          <span class="result-stat-label">Multiplicador Máximo</span>
+          <span class="result-stat-value" id="result-max-multiplier">1×</span>
         </div>
-        <div class="result-stat">
-          <span class="result-stat-label">Misses</span>
-          <span class="result-stat-value" id="result-misses">0</span>
-        </div>
-        <div class="result-stat">
-          <span class="result-stat-label">Erros</span>
-          <span class="result-stat-value" id="result-mistakes">0</span>
+      </div>
+
+      <!--
+        Total de acertos (PERFECT+GREAT+GOOD), ja calculado por
+        MatchResult desde a Parte 1 (`result.hits`). Mantido no DOM por
+        compatibilidade -- so nao aparece mais como um card proprio na
+        grade acima porque a Parte 2 pediu a contagem DETALHADA
+        (PERFECT/GREAT/GOOD) no lugar do total unico.
+      -->
+      <span id="result-hits" class="visually-hidden" aria-hidden="true"></span>
+
+      <!--
+        ETAPA 14C — PARTE 2: "RESULTADO DA PARTIDA" do modo "Jogar
+        contra Bot" -- exclusivo de isBotMode (ver client/js/main.js).
+        Escondido por padrao; so ResultRenderer.showBotMatchResult()
+        exibe, com os DOIS scores ja prontos (MatchResult do jogador
+        humano / BotMatchController+MatchResult do Bot -- nenhum calculo
+        novo de pontuacao aqui). O vencedor/perdedor/empate deste bloco
+        continua usando o MESMO #result-outcome acima (ETAPA 13F), so
+        com rotulos proprios do modo Bot ("BOT VENCEU" em vez de "VOCÊ
+        PERDEU" -- ver ResultRenderer.setBotMatchOutcome). No
+        Solo/Multiplayer, main.js nunca chama showBotMatchResult, entao
+        este bloco permanece escondido o tempo todo.
+      -->
+      <div id="result-bot-block" class="result-bot-block hidden">
+        <h3 class="result-section-title">Resultado da Partida</h3>
+        <!--
+          ETAPA 14D — PARTE 2C: dificuldade do Bot desta partida
+          ("Dificuldade: FÁCIL"/"MÉDIO"/"DIFÍCIL"), preenchida por
+          ResultRenderer.showBotMatchResult (mesmo bloco/mesma chamada
+          que ja preenche os dois scores abaixo -- nenhum elemento
+          novo de vencedor/perdedor, nenhuma segunda tela). Escondido
+          junto com o resto de #result-bot-block no Solo/Multiplayer.
+        -->
+        <p id="result-bot-difficulty" class="result-bot-difficulty"></p>
+        <div class="result-grid result-grid-bot">
+          <div class="result-stat result-stat-primary">
+            <span class="result-stat-label">Seu score</span>
+            <span class="result-stat-value" id="result-bot-player-score">0</span>
+          </div>
+          <div class="result-stat result-stat-primary">
+            <span class="result-stat-label">Score do Bot</span>
+            <span class="result-stat-value" id="result-bot-score">0</span>
+          </div>
         </div>
       </div>
 
@@ -236,6 +345,7 @@
   </section>
 
   <script src="js/config.js"></script>
+  <script src="js/network/localServerSimulator.js"></script>
   <script src="js/network/socketClient.js"></script>
   <script src="js/match/sequenceGenerator.js"></script>
   <script src="js/music/sequenceCatalog.js"></script>
@@ -250,11 +360,21 @@
   <script src="js/match/matchResult.js"></script>
   <script src="js/match/rematchController.js"></script>
   <script src="js/match/matchAbandonmentController.js"></script>
+  <!-- ETAPA 14A: estrutura inicial do Modo Bot. So disponibiliza o
+       modulo (BotController) para o restante do cliente -- nao esta
+       ligado a nenhum fluxo de Solo, Modo Teste ou Multiplayer ainda. -->
+  <script src="js/match/botController.js"></script>
+  <!-- ETAPA 14B (parte 2): execucao do Bot dentro de uma partida real
+       (BotMatchController). Assim como botController.js acima, so
+       disponibiliza o modulo -- nenhum botao/tela/fluxo real ainda o
+       chama. -->
+  <script src="js/match/botMatchController.js"></script>
   <script src="js/room/leaveRoomController.js"></script>
   <script src="js/input/inputController.js"></script>
   <script src="js/render/noteRenderer.js"></script>
   <script src="js/render/feedbackRenderer.js"></script>
   <script src="js/render/resultRenderer.js"></script>
+  <script src="js/audio/soundEffectsController.js"></script>
   <script src="js/ui/uiController.js"></script>
   <script src="js/main.js"></script>
 </body>
