@@ -36,14 +36,23 @@ const NoteRenderer = (() => {
   const isNode = typeof module !== 'undefined' && module.exports;
   const isBrowser = typeof document !== 'undefined';
   const NoteEngineRef = isNode ? require('../match/noteEngine') : NoteEngine;
+  const ClientConfigRef = isNode ? require('../config') : ClientConfig;
 
   // ---- Constantes puramente visuais (nao afetam julgamento nenhum) ----
   // Quanto tempo (ms) antes do tempo exato da nota ela comeca a "cair"
-  // visualmente, do topo da lane ate a linha de julgamento.
-  const NOTE_TRAVEL_MS = 1800;
-  // Posicao (em % da altura da lane-track) onde fica a linha/area de
-  // julgamento. A nota chega visualmente ali no exato note.time.
-  const HIT_LINE_PERCENT = 88;
+  // visualmente, do topo da lane ate o final do percurso. ETAPA 13B:
+  // deixou de ser uma constante local -- agora vem de ClientConfig
+  // (NOTE_TRAVEL_MS), a MESMA usada pela janela de julgamento
+  // (ClientConfig.NOTE_HIT_WINDOW_MS/JUDGEMENT_WINDOWS.GOOD_MS), para
+  // garantir que a seta so pode ser considerada "acertavel" exatamente
+  // durante o trecho em que ela esta visivelmente caindo na tela.
+  const NOTE_TRAVEL_MS = ClientConfigRef.NOTE_TRAVEL_MS;
+  // Posicao (em % da altura da lane-track) onde fica o final do
+  // percurso. ETAPA 13B: a nota agora desce ate perto do limite
+  // inferior da lane (nao mais uma "linha de julgamento" no meio do
+  // caminho) -- ela pode ser acertada em QUALQUER ponto da queda, e so
+  // e considerada perdida ao chegar aqui, no note.time.
+  const HIT_LINE_PERCENT = 96;
   // Margem extra (ms), somada a janela de julgamento (hitWindowMs), antes
   // de remover do DOM uma nota que por algum motivo ainda nao virou
   // hit/missed -- garante que o GameplayEngine sempre teve chance de
