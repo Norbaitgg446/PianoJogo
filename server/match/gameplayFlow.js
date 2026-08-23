@@ -37,7 +37,11 @@ const { send, sendError } = require('../ws/broadcast');
  * ser reforcado depois sem mexer no resto do fluxo.
  */
 
-const VALID_HIT_JUDGEMENTS = new Set(['PERFECT', 'GOOD']);
+// ETAPA 13C: 'GREAT' e a nova faixa intermediaria de julgamento
+// (ClientConfig.JUDGEMENT_WINDOWS.GREAT_MS / SCORE_VALUES.GREAT no
+// cliente) -- precisa ser aceita aqui tambem, senao todo note_hit com
+// esse julgamento seria rejeitado como invalido.
+const VALID_HIT_JUDGEMENTS = new Set(['PERFECT', 'GREAT', 'GOOD']);
 
 /**
  * Checagem leve: o noteId reportado tem o formato esperado para a seed
@@ -119,16 +123,30 @@ function applyNoteHit(ws, room, payload) {
 }
 
 /**
- * Calcula os PROXIMOS valores de misses/combo para um note_miss.
- * Funcao pura, mesma regra desde a Etapa 4B (miss soma 1, combo zera):
- * score e demais campos nao sao tocados por um miss.
+ * Calcula os PROXIMOS valores de misses/combo/score para um note_miss.
+ * Mesma regra desde a Etapa 4B para misses/combo (miss soma 1, combo
+ * zera).
  *
- * @param {{misses:number}} currentState
+ * ETAPA 13C: uma seta perdida agora pode descontar pontos (ver
+ * ClientConfig.PENALTIES.MISS no cliente) -- o servidor precisa
+ * refletir isso no estado oficial, senao o resultado final (fonte de
+ * verdade) ficaria com um score desatualizado em relacao ao que o
+ * jogador realmente viu na tela. Segue exatamente o MESMO padrao ja
+ * usado por computeNoteHitUpdate acima: confia no `score` reportado
+ * pelo cliente quando presente e valido, e so cai para o score atual
+ * (sem mudanca) quando o payload nao traz esse campo -- por isso
+ * chamadores antigos (que nunca mandavam `score` em note_miss)
+ * continuam com o score intocado, exatamente como antes desta etapa.
+ *
+ * @param {{misses:number, score:number}} currentState
+ * @param {{score?: number}} payload
  */
-function computeNoteMissUpdate(currentState) {
+function computeNoteMissUpdate(currentState, payload) {
+  const score = Number.isFinite(payload.score) ? payload.score : currentState.score;
   return {
     misses: currentState.misses + 1,
     combo: 0,
+    score,
   };
 }
 
@@ -147,9 +165,10 @@ function applyNoteMiss(ws, room, payload) {
     console.warn(`[match ${room.code}] noteId suspeito reportado por ${slot} em note_miss:`, payload.noteId);
   }
 
-  // Mesma regra de sempre (miss += 1, combo = 0), aplicada atraves da
-  // unica camada de escrita do estado oficial (playerMatchState).
-  const nextValues = computeNoteMissUpdate(currentState);
+  // Mesma regra de sempre (miss += 1, combo = 0) + score (ETAPA 13C,
+  // ver computeNoteMissUpdate acima), aplicada atraves da unica camada
+  // de escrita do estado oficial (playerMatchState).
+  const nextValues = computeNoteMissUpdate(currentState, payload);
   playerMatchState.updatePlayerMatchState(match, slot, nextValues);
   const updatedState = playerMatchState.getPlayerMatchState(match, slot);
 
