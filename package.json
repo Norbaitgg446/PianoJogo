@@ -43,7 +43,24 @@
     "test:match-configuration-final-11": "node tests/matchConfigurationFinal11.test.js",
     "test:gameplay-full-flow-12": "node tests/gameplayFullFlow12.test.js",
     "test:solo-mode-12a": "node tests/soloMode12A.test.js",
-    "test": "npm run test:notes && npm run test:gameplay && npm run test:gameplay-server && npm run test:input && npm run test:timeline && npm run test:render && npm run test:lane-input && npm run test:feedback && npm run test:match-end && npm run test:match-result && npm run test:result-renderer && npm run test:rematch && npm run test:rematch-client && npm run test:match-result-state && npm run test:final-match-state && npm run test:match-flow-finish && npm run test:match-outcome && npm run test:match-result-broadcast && npm run test:player-match-state && npm run test:gameplay-player-match-state-integration && npm run test:match-finalization-consistency && npm run test:match-abandonment && npm run test:match-abandonment-client && npm run test:match-abandonment-flow-consistency && npm run test:leave-room && npm run test:leave-room-client && npm run test:leave-room-full-cycle-9c && npm run test:music-catalog && npm run test:music-pattern-integration && npm run test:match-music-lifecycle && npm run test:music-selection-flow && npm run test:music-selection-controller && npm run test:match-configuration-flow-10e && npm run test:multiplayer-e2e-10f && npm run test:match-configuration-final-11 && npm run test:gameplay-full-flow-12 && npm run test:solo-mode-12a"
+    "test:local-server-simulator-13": "node tests/localServerSimulator13.test.js",
+    "test:socket-client-local-mode-13": "node tests/socketClientLocalMode13.test.js",
+    "test:new-arrow-mechanic-13b": "node tests/newArrowMechanic13B.test.js",
+    "test:scoring-system-13c": "node tests/scoringSystem13C.test.js",
+    "test:sound-effects-13d": "node tests/soundEffectsController.test.js",
+    "test:difficulty-progression-13e": "node tests/difficultyProgression13E.test.js",
+    "test:result-stats-13f": "node tests/resultStats13F.test.js",
+    "test:result-interface-flow-13f": "node tests/resultInterfaceFlow13F.test.js",
+    "test:bot-controller-14a": "node tests/botController14A.test.js",
+    "test:bot-core-reaction-14b": "node tests/botCoreReaction14B.test.js",
+    "test:bot-match-controller-14b": "node tests/botMatchController14B.test.js",
+    "test:bot-mode-14c": "node tests/botMode14C.test.js",
+    "test:bot-mode-14c-parte2": "node tests/botModeInterface14C2.test.js",
+    "test:bot-difficulty-14d1": "node tests/botDifficulty14D1.test.js",
+    "test:bot-difficulty-14d2": "node tests/botDifficulty14D2.test.js",
+    "test:bot-difficulty-14d2-interface": "node tests/botDifficulty14D2Interface.test.js",
+    "test:bot-difficulty-14d2c": "node tests/botDifficulty14D2C.test.js",
+    "test": "npm run test:notes && npm run test:gameplay && npm run test:gameplay-server && npm run test:input && npm run test:timeline && npm run test:render && npm run test:lane-input && npm run test:feedback && npm run test:match-end && npm run test:match-result && npm run test:result-renderer && npm run test:rematch && npm run test:rematch-client && npm run test:match-result-state && npm run test:final-match-state && npm run test:match-flow-finish && npm run test:match-outcome && npm run test:match-result-broadcast && npm run test:player-match-state && npm run test:gameplay-player-match-state-integration && npm run test:match-finalization-consistency && npm run test:match-abandonment && npm run test:match-abandonment-client && npm run test:match-abandonment-flow-consistency && npm run test:leave-room && npm run test:leave-room-client && npm run test:leave-room-full-cycle-9c && npm run test:music-catalog && npm run test:music-pattern-integration && npm run test:match-music-lifecycle && npm run test:music-selection-flow && npm run test:music-selection-controller && npm run test:match-configuration-flow-10e && npm run test:multiplayer-e2e-10f && npm run test:match-configuration-final-11 && npm run test:gameplay-full-flow-12 && npm run test:solo-mode-12a && npm run test:local-server-simulator-13 && npm run test:socket-client-local-mode-13 && npm run test:new-arrow-mechanic-13b && npm run test:scoring-system-13c && npm run test:sound-effects-13d && npm run test:difficulty-progression-13e && npm run test:result-stats-13f && npm run test:result-interface-flow-13f && npm run test:bot-controller-14a && npm run test:bot-core-reaction-14b && npm run test:bot-match-controller-14b && npm run test:bot-mode-14c && npm run test:bot-mode-14c-parte2 && npm run test:bot-difficulty-14d1 && npm run test:bot-difficulty-14d2 && npm run test:bot-difficulty-14d2-interface && npm run test:bot-difficulty-14d2c"
   },
   "dependencies": {
     "ws": "^8.18.0"
