@@ -13,6 +13,38 @@
   // sendo a UNICA autoridade sobre `match.mode`.
   let isSoloMode = false;
 
+  // ETAPA 14C: true assim que o jogador pediu "Jogar contra Bot" (ver
+  // btn-play-bot abaixo) ate sair da sala/abandonar/trocar de modo --
+  // estado PROPRIO, NUNCA reaproveitando isSoloMode para representar o
+  // Bot. Por baixo, o clique reutiliza o MESMO pipeline de partida do
+  // Solo (start_solo_match), pelo mesmo motivo que o Modo Teste ja faz
+  // isso hoje (unica forma existente de obter seed/timeline
+  // sincronizadas) -- por isso `isSoloMode` tambem acaba virando true
+  // quando o servidor confirma `match.mode === 'solo'` (ver case
+  // 'match_ready' abaixo, inalterado). Isso e apenas um detalhe de
+  // encanamento: nenhuma logica do Bot (abaixo) e condicionada a
+  // `isSoloMode` -- so a `isBotMode`, que so este bloco/os handlers do
+  // botao do Bot alteram.
+  let isBotMode = false;
+  // Instancia do Bot ativo NESTA partida (Etapa 14C), criada por
+  // BotMatchController.createBotMatch (Etapa 14B) dentro de
+  // startMatchGameplay quando isBotMode e verdadeiro. Null fora do
+  // modo Bot ou entre partidas.
+  let botMatch = null;
+  // ETAPA 14D — PARTE 2B: identificador ("EASY"/"MEDIUM"/"HARD", ver
+  // ClientConfig.BOT_DIFFICULTY) escolhido pelo jogador na tela
+  // "Escolha a dificuldade" (aberta por btn-play-bot, ver mais abaixo).
+  // Estado PROPRIO -- nunca persistido (sem localStorage), existe
+  // somente durante o fluxo da partida atual/sala atual, exatamente
+  // como isBotMode/botMatch acima: comeca null, e definido quando o
+  // jogador escolhe uma das tres opcoes, e limpo sempre que isBotMode
+  // tambem e limpo (cancelar a selecao, trocar de modo, sair da sala).
+  // Usado dentro de startMatchGameplay para resolver a config do Bot
+  // (via BotController.createConfigForDifficulty, Etapa 14D-2A) --
+  // nenhum sistema de Bot novo, so este identificador chegando ao
+  // sistema ja existente.
+  let selectedBotDifficulty = null;
+
   // Engine de gameplay do jogador LOCAL (Etapa 5B-1). So existe uma
   // instancia aqui -- a deste navegador -- porque cada cliente so
   // controla o proprio jogador; o estado do oponente chega via
@@ -172,12 +204,60 @@
           newlyMissed.forEach((note) => {
             FeedbackRenderer.showJudgement(currentSlot, 'MISS');
             FeedbackRenderer.flashNote(currentSlot, note.id, 'MISS');
+            // Etapa 13D Parte 2: so REPASSA o mesmo outcome ('MISS') que
+            // ja acionou o feedback visual acima para o efeito sonoro --
+            // nenhuma logica de MISS nova. Se o navegador tiver
+            // bloqueado o audio, playForOutcome so devolve false; nunca
+            // lanca e nunca interrompe este loop.
+            SoundEffectsController.playForOutcome('MISS');
           });
           if (localPlayerState) {
             FeedbackRenderer.updateScore(currentSlot, localPlayerState.score);
             FeedbackRenderer.updateCombo(currentSlot, localPlayerState.combo);
           }
         }
+      }
+
+      // ETAPA 14C: avanca o Bot no MESMO frame/relogio sincronizado
+      // acima (getSyncedNow(), nunca Date.now() dentro do Bot -- ver
+      // botMatchController.js) -- nenhum setTimeout/setInterval novo
+      // por nota nem no total; quem decide o ritmo e este MESMO loop de
+      // requestAnimationFrame que ja processa as notas expiradas do
+      // jogador humano. Nao mexe na timeline nem no PlayerState do
+      // jogador -- so no PROPRIO PlayerState do Bot, exibido na area
+      // reaproveitada do player2 (FeedbackRenderer, mesmo mecanismo ja
+      // usado para o jogador local).
+      if (isBotMode && botMatch) {
+        const botExecutedNow = BotMatchController.tick(botMatch, getSyncedNow());
+
+        // ETAPA 14C — PARTE 2: feedback visual de CADA acerto/erro do
+        // Bot nesta partida (PERFECT/GREAT/GOOD/MISS/ERRO) -- so
+        // REPASSA, via FeedbackRenderer (mesmo mecanismo/area do
+        // player2 ja usado para score/combo), o `outcome` que
+        // BotController ja decidiu (Etapa 14B) e que BotMatchController.tick
+        // acabou de aplicar ao PlayerState do Bot acima. Nenhum
+        // julgamento novo e calculado aqui. O Bot nunca chama
+        // NoteEngine.setNoteState (ver botMatchController.js) -- a nota
+        // visual exibida em player2-playfield (mesmo `note.id`, ja
+        // desenhada nos dois lados pelo NoteRenderer) so recebe um
+        // "flash" transitorio, sem afetar a timeline real do jogador.
+        if (botExecutedNow && botExecutedNow.length > 0) {
+          botExecutedNow.forEach((decision) => {
+            FeedbackRenderer.showJudgement('player2', decision.outcome);
+            if (
+              decision.outcome === 'PERFECT' ||
+              decision.outcome === 'GREAT' ||
+              decision.outcome === 'GOOD'
+            ) {
+              FeedbackRenderer.flashNote('player2', decision.noteId, 'HIT');
+            } else if (decision.outcome === 'MISS') {
+              FeedbackRenderer.flashNote('player2', decision.noteId, 'MISS');
+            }
+          });
+        }
+
+        FeedbackRenderer.updateScore('player2', botMatch.playerState.score);
+        FeedbackRenderer.updateCombo('player2', botMatch.playerState.combo);
       }
 
       // Etapa 5B-4A: depois de varrer as notas expiradas acima (mesmo
@@ -222,6 +302,15 @@
     // partida (nunca a cada frame). Le somente o que PlayerState e a
     // timeline ja existente (via MatchTimelineManager.getTimeline())
     // ja fornecem -- nenhuma contagem nova de hits/misses/mistakes.
+    // ETAPA 14C: gera o resultado final do Bot assim que a partida
+    // termina, reaproveitando integralmente BotMatchController.finalize
+    // (Etapa 14B) -- o MESMO formato de MatchResult que o jogador
+    // humano ja usa abaixo, guardado dentro do proprio `botMatch`
+    // (BotMatchController.getResult).
+    if (isBotMode && botMatch) {
+      BotMatchController.finalize(botMatch);
+    }
+
     const timeline = MatchTimelineManager.getTimeline();
     if (localPlayerState && timeline) {
       const result = MatchResult.generateResult({ playerState: localPlayerState, timeline });
@@ -235,6 +324,43 @@
       // -- nenhum numero novo e calculado aqui, ResultRenderer so exibe.
       UIController.hideGameField();
       ResultRenderer.show(result);
+
+      // ETAPA 14C — PARTE 2: resultado do MODO BOT (vencedor/perdedor/
+      // empate + comparacao de score), exclusivo de isBotMode -- NUNCA
+      // altera a regra de vencedor do Multiplayer (que continua vindo
+      // exclusivamente do servidor, via match_result/setMatchOutcome
+      // mais abaixo). A comparacao aqui usa apenas os DOIS scores ja
+      // prontos: `result.score` (MatchResult do jogador humano, acima)
+      // e `botResult.score` (BotMatchController.getResult, ja calculado
+      // por MatchResult.buildResult dentro de finalize() acima) --
+      // nenhuma formula de pontuacao/vencedor nova, so um `>`/`<`/`===`
+      // simples entre dois numeros ja existentes.
+      if (isBotMode && botMatch) {
+        const botResult = BotMatchController.getResult(botMatch);
+        if (botResult) {
+          let botOutcome;
+          if (result.score > botResult.score) botOutcome = 'win';
+          else if (botResult.score > result.score) botOutcome = 'lose';
+          else botOutcome = 'draw';
+
+          ResultRenderer.setBotMatchOutcome(botOutcome);
+          // ETAPA 14D — PARTE 2C: agora tambem repassa a dificuldade
+          // JA escolhida nesta partida (selectedBotDifficulty) para a
+          // tela de resultado exibir "Dificuldade: FÁCIL/MÉDIO/
+          // DIFÍCIL" -- nenhuma dificuldade nova e decidida aqui, so
+          // o MESMO identificador que ja resolveu a config do Bot em
+          // startMatchGameplay (ver BotController.createConfigForDifficulty
+          // acima).
+          ResultRenderer.showBotMatchResult({
+            playerScore: result.score,
+            botScore: botResult.score,
+            difficulty: selectedBotDifficulty,
+          });
+          UIController.logMessage(
+            `Resultado do modo Bot: voce ${result.score} x ${botResult.score} Bot.`
+          );
+        }
+      }
       // Etapa 10D: a partida terminou -- o servidor ja aceita uma nova
       // selecao de musica para a proxima Match desta sala (ex: antes
       // de uma revanche, ver rematchFlow.js), entao a interface volta
@@ -313,6 +439,10 @@
     localMatchEndDetector = null;
     MatchTimelineManager.clear();
     MatchResult.clearResult();
+    // ETAPA 14C: a partida do Bot (se havia uma) tambem acabou aqui --
+    // nunca deixa uma instancia "orfa" sendo referenciada (o loop que a
+    // chamaria ja parou acima de qualquer forma).
+    botMatch = null;
 
     ResultRenderer.reset();
     rematchController.reset();
@@ -375,6 +505,9 @@
     localMatchEndDetector = null;
     MatchTimelineManager.clear();
     MatchResult.clearResult();
+    // ETAPA 14C: mesmo motivo do reset acima -- nenhuma instancia de
+    // Bot deve sobreviver a saida da sala.
+    botMatch = null;
 
     ResultRenderer.reset();
     rematchController.reset();
@@ -390,6 +523,13 @@
     // multiplayer) associada mais.
     isSoloMode = false;
     UIController.setSoloMode(false);
+    // ETAPA 14C: mesmo motivo -- de volta ao lobby, nenhum modo Bot
+    // associado mais.
+    isBotMode = false;
+    UIController.setBotMode(false);
+    // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
+    // escolhida sobrevive a saida da sala.
+    selectedBotDifficulty = null;
     UIController.resetToLobby();
     UIController.logMessage('Voce saiu da sala.');
   }
@@ -403,6 +543,12 @@
   function handleLanePressed(lane) {
     if (!localGameplayEngine) return;
 
+    // Etapa 13D Parte 2: combo ANTES desta tentativa, so para detectar
+    // depois se ele realmente subiu (nunca recalculado -- PlayerState
+    // continua sendo a UNICA fonte de verdade do combo; isto so LE o
+    // valor que ele ja mantinha antes de handleKeyPress atualizar).
+    const comboBefore = localPlayerState ? localPlayerState.combo : 0;
+
     // Etapa 5B-3A: julgamento usa o relogio sincronizado da partida
     // (getSyncedNow), o MESMO usado pelo NoteRenderer para posicionar as
     // notas -- nunca o horario bruto de chegada da tecla no navegador.
@@ -415,12 +561,27 @@
     // GameplayEngine) para a camada visual -- nenhum julgamento/score/
     // combo novo e calculado aqui.
     FeedbackRenderer.showJudgement(currentSlot, result.outcome);
-    if (result.outcome === 'PERFECT' || result.outcome === 'GOOD') {
+    if (result.outcome === 'PERFECT' || result.outcome === 'GREAT' || result.outcome === 'GOOD') {
       FeedbackRenderer.flashNote(currentSlot, result.noteId, 'HIT');
     }
+
+    // Etapa 13D Parte 2: efeito sonoro do julgamento (PERFECT/GREAT/
+    // GOOD/ERRO) -- so REPASSA o mesmo `result.outcome` ja usado acima
+    // para o feedback visual. Bloqueio de audio pelo navegador nunca
+    // interrompe o fluxo: playForOutcome so devolve false nesse caso.
+    SoundEffectsController.playForOutcome(result.outcome);
+
     if (localPlayerState) {
       FeedbackRenderer.updateScore(currentSlot, localPlayerState.score);
       FeedbackRenderer.updateCombo(currentSlot, localPlayerState.combo);
+
+      // Etapa 13D Parte 2: som extra e distinto quando o combo REALMENTE
+      // sobe (toca por cima do som de julgamento acima, nunca no lugar
+      // dele). Usa o combo que o proprio PlayerState ja atualizou dentro
+      // de handleKeyPress -- nenhum combo novo e calculado aqui.
+      if (localPlayerState.combo > comboBefore) {
+        SoundEffectsController.playComboUp();
+      }
     }
   }
 
@@ -442,6 +603,21 @@
   // inventado aqui.
   ResultRenderer.setOnBackToMenu(() => {
     ResultRenderer.hide();
+    // ETAPA 14D — PARTE 2C: limpa explicitamente todo estado do modo
+    // Bot desta partida ANTES de recarregar -- mesmo padrao ja usado
+    // por "Criar sala"/"Entrar em sala"/"Jogar Sozinho"/"Cancelar" da
+    // selecao de dificuldade (ver os handlers correspondentes mais
+    // abaixo). O reload logo em seguida ja destroi este closure
+    // inteiro (nenhuma variavel sobrevive de qualquer forma), mas
+    // deixar a limpeza explicita aqui documenta a intencao e garante
+    // o mesmo resultado mesmo que o reload deixe de existir no
+    // futuro: nenhuma dificuldade escolhida numa partida contra Bot
+    // pode vazar para o proximo modo iniciado (Solo, Multiplayer ou
+    // um novo Bot).
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    selectedBotDifficulty = null;
     window.location.reload();
   });
 
@@ -617,6 +793,9 @@
         // Etapa 5B-4B: partida cancelada antes do fim NAO gera resultado
         // -- e nao pode sobrar nenhum resultado de uma tentativa anterior.
         MatchResult.clearResult();
+        // ETAPA 14C: mesmo motivo -- nenhuma instancia de Bot sobrevive
+        // a uma partida cancelada.
+        botMatch = null;
         break;
 
       case 'match_abandoned':
@@ -638,10 +817,16 @@
         // registra o que o proprio cliente reportou via note_hit/
         // note_miss). Garante que gameplay/input ficam parados
         // (chamadas idempotentes, mesmas ja usadas em match_cancelled/
-        // match_abandoned) e so registra o resultado oficial no log --
-        // nenhuma tela nova, nenhuma segunda partida iniciada aqui (a
-        // revanche continua dependendo exclusivamente do clique em
-        // "Jogar Novamente").
+        // match_abandoned).
+        //
+        // ETAPA 13F — PARTE 2: alem do log, agora tambem preenchemos o
+        // bloco de vencedor/perdedor/empate da tela de resultado
+        // (ResultRenderer.setMatchOutcome) -- nenhuma logica NOVA de
+        // decisao de vencedor e criada aqui, so uma TRADUCAO do que o
+        // servidor ja decidiu (`message.winner`/`message.loser`/
+        // `message.result`, ver server/match/matchOutcome.js, inalterado)
+        // para o ponto de vista do jogador local (comparando com
+        // `currentSlot`, que so este cliente conhece).
         NoteRenderer.stop();
         stopExpiredNotesLoop();
         InputController.setLaneHandler(null);
@@ -649,14 +834,18 @@
         // loser (nao ha oponente para comparar -- ver
         // matchFlow.finishMatch) -- so as estatisticas de player1, ja
         // mostradas pelo resultado local (handleLocalMatchEnd). Nao
-        // mostrar vencedor/perdedor/empate aqui.
-        UIController.logMessage(
-          message.mode === 'solo'
-            ? 'Resultado oficial do servidor confirmado (modo Solo).'
-            : message.result === 'draw'
-              ? 'Resultado oficial do servidor: empate.'
-              : `Resultado oficial do servidor: ${message.winner} venceu.`
-        );
+        // mostrar vencedor/perdedor/empate aqui (o Modo Teste tambem
+        // cai aqui, ja que localServerSimulator so replica o fluxo
+        // Solo -- ver localServerSimulator.js).
+        if (message.mode === 'solo') {
+          UIController.logMessage('Resultado oficial do servidor confirmado (modo Solo).');
+        } else if (message.result === 'draw') {
+          ResultRenderer.setMatchOutcome('draw');
+          UIController.logMessage('Resultado oficial do servidor: empate.');
+        } else {
+          ResultRenderer.setMatchOutcome(message.winner === currentSlot ? 'win' : 'lose');
+          UIController.logMessage(`Resultado oficial do servidor: ${message.winner} venceu.`);
+        }
         break;
 
       case 'sequence_check_result':
@@ -845,6 +1034,12 @@
       noteRange: pattern.noteRange,
       noteIntervalMs: pattern.noteIntervalMs,
       leadInMs: pattern.leadInMs,
+      // ETAPA 13E: mesma configuracao centralizada para QUALQUER modo
+      // (Multiplayer/Solo/Teste) -- startMatchGameplay e o UNICO ponto
+      // de entrada que monta a timeline em todos eles, entao nenhum
+      // modo pode ficar com um comportamento de dificuldade diferente
+      // dos outros por acidente.
+      difficultyStages: ClientConfig.DIFFICULTY_PROGRESSION.STAGES,
     });
     UIController.logMessage(`Timeline de notas gerada localmente (${timeline.length} notas).`);
 
@@ -869,11 +1064,68 @@
       playerState,
       windows: {
         perfectMs: ClientConfig.JUDGEMENT_WINDOWS.PERFECT_MS,
+        greatMs: ClientConfig.JUDGEMENT_WINDOWS.GREAT_MS,
         goodMs: ClientConfig.JUDGEMENT_WINDOWS.GOOD_MS,
       },
       scoreValues: ClientConfig.SCORE_VALUES,
+      // ETAPA 13C: multiplicador de combo e penalizacoes de MISTAKE/MISS,
+      // ambos centralizados em ClientConfig -- ver client/js/config.js.
+      comboMultiplierTiers: ClientConfig.COMBO_MULTIPLIER.TIERS,
+      penalties: ClientConfig.PENALTIES,
       sendEvent: SocketClient.send,
     });
+
+    // ETAPA 14C/14D: cria o Bot desta partida SOMENTE quando isBotMode.
+    // Reaproveita a MESMA instancia de `timeline` acima (nunca uma
+    // copia/segunda geracao) e as MESMAS janelas/pontuacao/penalidades
+    // ja usadas pelo GameplayEngine do jogador humano logo acima --
+    // nenhum sistema de pontuacao/julgamento novo. BotMatchController
+    // ja cria o PROPRIO PlayerState do Bot internamente (nunca
+    // reaproveitando `playerState`, que e exclusivamente do jogador
+    // humano) -- ver client/js/match/botMatchController.js.
+    //
+    // ETAPA 14D — PARTE 2B: `config` agora resolve o preset de
+    // dificuldade escolhido pelo jogador (`selectedBotDifficulty`,
+    // "EASY"/"MEDIUM"/"HARD") via
+    // BotController.createConfigForDifficulty (Etapa 14D-2A) --
+    // exatamente a mesma ponte ja pronta desde aquela parte, so
+    // finalmente chamada com um identificador de verdade (antes,
+    // nada chamava esta funcao e o Bot sempre usava DEFAULT_CONFIG).
+    // Nenhum parametro novo, nenhum segundo sistema de configuracao.
+    botMatch = null;
+    if (isBotMode) {
+      const botConfig = BotController.createConfigForDifficulty(
+        ClientConfig.BOT_DIFFICULTY_PRESETS,
+        selectedBotDifficulty
+      );
+
+      botMatch = BotMatchController.createBotMatch({
+        timeline,
+        config: botConfig,
+        windows: {
+          perfectMs: ClientConfig.JUDGEMENT_WINDOWS.PERFECT_MS,
+          greatMs: ClientConfig.JUDGEMENT_WINDOWS.GREAT_MS,
+          goodMs: ClientConfig.JUDGEMENT_WINDOWS.GOOD_MS,
+        },
+        scoreValues: ClientConfig.SCORE_VALUES,
+        comboMultiplierTiers: ClientConfig.COMBO_MULTIPLIER.TIERS,
+        penalties: ClientConfig.PENALTIES,
+      });
+
+      // Area do Bot (Etapa 14C, item 7): reaproveita a MESMA estrutura
+      // visual/mecanismo do player2 (FeedbackRenderer, ja usado para o
+      // jogador local) para mostrar "BOT" com score/combo zerados desta
+      // nova partida -- nenhum elemento novo, nenhum sistema visual
+      // paralelo.
+      FeedbackRenderer.reset('player2');
+      FeedbackRenderer.updateScore('player2', botMatch.playerState.score);
+      FeedbackRenderer.updateCombo('player2', botMatch.playerState.combo);
+      // ETAPA 14D — PARTE 2B: garante que o rotulo "BOT — <DIFICULDADE>"
+      // (ver UIController.setBotMode) esteja correto mesmo numa
+      // revanche (Jogar Novamente), quando este bloco roda de novo sem
+      // passar por nenhum clique novo de selecao de dificuldade.
+      UIController.setBotMode(true, selectedBotDifficulty);
+    }
 
     InputController.setLaneHandler(handleLanePressed);
 
@@ -905,6 +1157,14 @@
   document.getElementById('btn-create-room').addEventListener('click', () => {
     isSoloMode = false;
     UIController.setSoloMode(false);
+    // ETAPA 14C: multiplayer real -- garante que nenhum estado de uma
+    // tentativa anterior de Bot sobrevive a esta sala nova.
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
+    // escolhida antes sobrevive a uma sala de multiplayer real.
+    selectedBotDifficulty = null;
     SocketClient.send('create_room');
   });
 
@@ -916,6 +1176,12 @@
     }
     isSoloMode = false;
     UIController.setSoloMode(false);
+    // ETAPA 14C: mesmo motivo do "Criar sala" acima.
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    // ETAPA 14D — PARTE 2B: mesmo motivo do "Criar sala" acima.
+    selectedBotDifficulty = null;
     SocketClient.send('join_room', { roomCode });
   });
 
@@ -927,7 +1193,60 @@
   document.getElementById('btn-play-solo').addEventListener('click', () => {
     isSoloMode = true;
     UIController.setSoloMode(true);
+    // ETAPA 14C: "Jogar Sozinho" continua exatamente como antes -- isto
+    // so garante que um Bot de uma tentativa anterior nunca sobrevive a
+    // uma partida Solo pura (isBotMode e um estado SEPARADO, nunca
+    // ligado por este botao).
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
+    // escolhida antes sobrevive a uma partida Solo pura.
+    selectedBotDifficulty = null;
     SocketClient.send('start_solo_match');
+  });
+
+  // ETAPA 14C/14D: "Jogar contra Bot" -- botao SEPARADO de "Jogar
+  // Sozinho" acima. A partir da ETAPA 14D-2B, o clique NAO inicia mais
+  // a partida diretamente: so abre a tela "Escolha a dificuldade"
+  // (ver bot-difficulty-panel em client/index.html). `isBotMode`
+  // continua false e `start_solo_match` continua sem ser enviado ate
+  // o jogador escolher (ou cancelar) uma dificuldade logo abaixo.
+  document.getElementById('btn-play-bot').addEventListener('click', () => {
+    UIController.showBotDifficultySelection();
+  });
+
+  // ETAPA 14D — PARTE 2B: as tres opcoes da tela "Escolha a
+  // dificuldade". Cada botao so le seu proprio `data-difficulty`
+  // ("EASY"/"MEDIUM"/"HARD", ver ClientConfig.BOT_DIFFICULTY) -- o
+  // MESMO identificador estavel que BotController.createConfigForDifficulty
+  // (Etapa 14D-2A) ja sabe resolver, nenhuma conversao para outro
+  // sistema paralelo. Escolher uma opcao e o que finalmente liga
+  // `isBotMode` e envia `start_solo_match` -- por baixo, reutiliza o
+  // MESMO pipeline de partida que "Jogar Sozinho"/Modo Teste ja usam
+  // (unica forma ja existente de obter seed/timeline sincronizadas),
+  // exatamente como a Etapa 14C ja fazia antes desta tela existir.
+  document.querySelectorAll('#bot-difficulty-panel [data-difficulty]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const difficulty = button.dataset.difficulty;
+      isBotMode = true;
+      selectedBotDifficulty = difficulty;
+      UIController.setBotMode(true, difficulty);
+      UIController.hideBotDifficultySelection();
+      SocketClient.send('start_solo_match');
+    });
+  });
+
+  // ETAPA 14D — PARTE 2B: "Cancelar" na tela "Escolha a dificuldade".
+  // So fecha o painel -- nenhuma partida e iniciada, `isBotMode`
+  // continua false, `botMatch` continua null e `selectedBotDifficulty`
+  // e limpo (nunca sobrevive a um cancelamento).
+  document.getElementById('btn-bot-difficulty-cancel').addEventListener('click', () => {
+    UIController.hideBotDifficultySelection();
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    selectedBotDifficulty = null;
   });
 
   document.getElementById('btn-send-test').addEventListener('click', () => {
@@ -945,6 +1264,18 @@
   document.getElementById('btn-leave-room').addEventListener('click', () => {
     leaveRoomController.requestLeave();
   });
+
+  // Etapa 13D Parte 2 (item 3 do enunciado): navegadores -- em especial
+  // no celular -- so deixam audio tocar depois de um gesto do jogador.
+  // Um UNICO listener, removido apos disparar uma vez (`{ once: true }`),
+  // cobrindo clique, toque e teclado (o que vier primeiro), tentando
+  // destravar o AudioContext dos efeitos sonoros. Se o navegador negar
+  // mesmo assim, SoundEffectsController.unlock() so devolve false -- o
+  // jogo continua funcionando normalmente, sem som, sem travar nada.
+  const unlockAudioOnce = () => SoundEffectsController.unlock();
+  document.addEventListener('pointerdown', unlockAudioOnce, { once: true });
+  document.addEventListener('keydown', unlockAudioOnce, { once: true });
+  document.addEventListener('touchstart', unlockAudioOnce, { once: true, passive: true });
 
   SocketClient.connect();
 })();
