@@ -163,15 +163,16 @@ test('totalNotes corresponde ao tamanho real da timeline da partida', () => {
 });
 
 // ---------------------------------------------------------------------
-// 8. Precisao e calculada corretamente (hits / totalNotes * 100)
+// 8. Precisao e calculada corretamente (ETAPA 13F: acertos / (acertos +
+// ERRO + MISS) * 100, ver client/js/match/matchResult.js#calculateAccuracy)
 // ---------------------------------------------------------------------
-test('accuracy e calculada como hits / totalNotes * 100', () => {
-  assert.strictEqual(MatchResult.calculateAccuracy(82, 100), 82);
-  assert.strictEqual(MatchResult.calculateAccuracy(1, 3), 33.33);
-  assert.strictEqual(MatchResult.calculateAccuracy(2, 3), 66.67);
+test('accuracy e calculada como acertos / (acertos + erro + miss) * 100', () => {
+  assert.strictEqual(MatchResult.calculateAccuracy({ perfectCount: 82, misses: 18 }), 82);
+  assert.strictEqual(MatchResult.calculateAccuracy({ perfectCount: 1, misses: 2 }), 33.33);
+  assert.strictEqual(MatchResult.calculateAccuracy({ perfectCount: 2, misses: 1 }), 66.67);
 });
 
-test('accuracy do resultado bate com o exemplo da especificacao (82 hits em 100 notas = 82%)', () => {
+test('accuracy do resultado bate com o exemplo da especificacao (82 acertos em 100 tentativas = 82%)', () => {
   const params = { ...BASE_PARAMS, length: 100 };
   const { timeline, playerState } = playThroughMatch({ hits: 82, misses: 12, mistakes: 6, params });
   timeline.forEach((note) => {
@@ -183,20 +184,26 @@ test('accuracy do resultado bate com o exemplo da especificacao (82 hits em 100 
   assert.deepStrictEqual(result, {
     score: playerState.score,
     maxCombo: playerState.maxCombo,
+    maxMultiplier: playerState.maxMultiplier,
     hits: 82,
+    perfectCount: playerState.perfectCount,
+    greatCount: playerState.greatCount,
+    goodCount: playerState.goodCount,
     misses: playerState.misses,
     mistakes: 6,
     totalNotes: 100,
+    // 82 acertos sobre 82+12(miss)+6(erro) = 100 tentativas julgadas.
     accuracy: 82,
   });
 });
 
 // ---------------------------------------------------------------------
-// 9. Precisao com 0 notas retorna 0 (sem divisao por zero)
+// 9. Precisao com 0 tentativas retorna 0 (sem divisao por zero)
 // ---------------------------------------------------------------------
-test('accuracy com totalNotes 0 retorna 0, sem lancar erro de divisao por zero', () => {
-  assert.strictEqual(MatchResult.calculateAccuracy(0, 0), 0);
-  assert.strictEqual(MatchResult.calculateAccuracy(5, 0), 0);
+test('accuracy sem nenhuma tentativa julgada retorna 0, sem lancar erro de divisao por zero', () => {
+  assert.strictEqual(MatchResult.calculateAccuracy({}), 0);
+  assert.strictEqual(MatchResult.calculateAccuracy({ perfectCount: 5 }), 100);
+  assert.strictEqual(MatchResult.calculateAccuracy(undefined), 0);
 });
 
 test('buildResult com timeline vazia produz totalNotes 0 e accuracy 0', () => {
@@ -308,7 +315,19 @@ test('todos os campos do resultado continuam disponiveis (nenhum some) depois de
   const { timeline, playerState } = playThroughMatch({ hits: 5, misses: 2, mistakes: 1 });
   const result = MatchResult.generateResult({ playerState, timeline });
 
-  ['score', 'maxCombo', 'hits', 'misses', 'mistakes', 'totalNotes', 'accuracy'].forEach((field) => {
+  [
+    'score',
+    'maxCombo',
+    'maxMultiplier',
+    'hits',
+    'perfectCount',
+    'greatCount',
+    'goodCount',
+    'misses',
+    'mistakes',
+    'totalNotes',
+    'accuracy',
+  ].forEach((field) => {
     assert.ok(Object.prototype.hasOwnProperty.call(result, field), `campo ausente: ${field}`);
     assert.strictEqual(typeof result[field], 'number', `campo nao numerico: ${field}`);
   });
