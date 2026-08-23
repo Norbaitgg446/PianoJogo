@@ -26,6 +26,7 @@ const FeedbackRenderer = (() => {
   // ---- ou MISTAKE: so como CADA resultado ja existente e exibido.  ----
   const JUDGEMENT_LABELS = {
     PERFECT: 'PERFECT',
+    GREAT: 'GREAT', // ETAPA 13C — faixa intermediaria entre PERFECT e GOOD
     GOOD: 'GOOD',
     MISS: 'MISS',
     MISTAKE: 'ERRO', // distinto de MISS: erro de tecla != nota perdida por tempo
@@ -33,6 +34,7 @@ const FeedbackRenderer = (() => {
 
   const JUDGEMENT_CLASS = {
     PERFECT: 'judgement-perfect',
+    GREAT: 'judgement-great',
     GOOD: 'judgement-good',
     MISS: 'judgement-miss',
     MISTAKE: 'judgement-mistake',
