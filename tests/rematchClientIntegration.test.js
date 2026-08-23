@@ -352,6 +352,10 @@ test('fluxo completo da revanche: resultado -> ready -> aguardando -> ambos pron
   rematch.reset(); // main.js chama isto dentro de startMatchGameplay
 
   // 5. PlayerState comeca zerado -------------------------------------------
+  // ETAPA 13F: PlayerState.createPlayerState() ganhou perfectCount/
+  // greatCount/goodCount/maxMultiplier (contagem detalhada para a tela
+  // de resultado) -- continuam todos zerados (maxMultiplier em 1, seu
+  // valor minimo) numa partida nova, exatamente como os campos antigos.
   assert.deepStrictEqual(match2.playerState, {
     score: 0,
     combo: 0,
@@ -359,6 +363,10 @@ test('fluxo completo da revanche: resultado -> ready -> aguardando -> ambos pron
     hits: 0,
     misses: 0,
     mistakes: 0,
+    perfectCount: 0,
+    greatCount: 0,
+    goodCount: 0,
+    maxMultiplier: 1,
   });
 
   // 6. Nova timeline e criada -----------------------------------------------
