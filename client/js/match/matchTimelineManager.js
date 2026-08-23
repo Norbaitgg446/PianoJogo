@@ -51,9 +51,14 @@ const MatchTimelineManager = (() => {
    * @param {number} options.noteRange
    * @param {number} options.noteIntervalMs
    * @param {number} [options.leadInMs]
+   * @param {Array<{notesPlayed:number, speedMultiplier:number}>} [options.difficultyStages] -
+   *   ETAPA 13E — so repassado adiante para NoteEngine.generateNoteTimeline
+   *   (ver ClientConfig.DIFFICULTY_PROGRESSION.STAGES); este modulo
+   *   continua sem saber nada sobre COMO a progressao funciona, so
+   *   sobre QUANDO (re)gerar a timeline.
    * @returns {Array} a timeline ativa (nova ou ja existente) desta partida
    */
-  function ensureTimeline({ seed, startTimestamp, length, noteRange, noteIntervalMs, leadInMs }) {
+  function ensureTimeline({ seed, startTimestamp, length, noteRange, noteIntervalMs, leadInMs, difficultyStages }) {
     const key = buildMatchKey(seed, startTimestamp);
 
     if (currentTimeline && currentMatchKey === key) {
@@ -71,6 +76,7 @@ const MatchTimelineManager = (() => {
       noteRange,
       noteIntervalMs,
       leadInMs,
+      difficultyStages,
     });
     currentMatchKey = key;
 
