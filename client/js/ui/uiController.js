@@ -25,7 +25,30 @@ const UIController = (() => {
     musicSelectionPanel: document.getElementById('music-selection-panel'),
     musicList: document.getElementById('music-list'),
     musicSelectionStatus: document.getElementById('music-selection-status'),
+    // ETAPA 14C: rotulo do "oponente" no campo de jogo -- reaproveitado
+    // para mostrar "BOT" quando o modo Bot esta ativo (ver setBotMode).
+    player2NameDisplay: document.getElementById('player2-name'),
+    // ETAPA 14D — PARTE 2B: painel de selecao de dificuldade do Bot.
+    botDifficultyPanel: document.getElementById('bot-difficulty-panel'),
   };
+
+  // ETAPA 14D — PARTE 2B: rotulos exibidos (pt-BR) para cada
+  // identificador estavel de dificuldade (ClientConfig.BOT_DIFFICULTY,
+  // em client/js/config.js) -- usados SOMENTE para texto na tela
+  // (ex: "BOT — FÁCIL"). O identificador que trafega para o sistema
+  // de Bot continua sendo sempre "EASY"/"MEDIUM"/"HARD", nunca este
+  // rotulo.
+  const BOT_DIFFICULTY_LABELS = {
+    EASY: 'FÁCIL',
+    MEDIUM: 'MÉDIO',
+    HARD: 'DIFÍCIL',
+  };
+
+  // ETAPA 14C: nome exibido em player2-name quando NAO estamos no modo
+  // Bot -- capturado uma vez, do proprio HTML, para setBotMode(false)
+  // conseguir devolver o rotulo original (multiplayer real) sem
+  // hardcodar o texto aqui.
+  const DEFAULT_PLAYER2_NAME = el.player2NameDisplay ? el.player2NameDisplay.textContent : 'Jogador 2';
 
   function setConnectionStatus(status) {
     el.statusText.textContent = status;
@@ -253,6 +276,60 @@ const UIController = (() => {
     document.body.classList.toggle('solo-mode', Boolean(isSolo));
   }
 
+  /**
+   * ETAPA 14C — liga/desliga o modo visual Bot (classe `bot-mode` em
+   * <html>/<body>, mesmo padrao de `setSoloMode` acima). Por baixo, o
+   * modo Bot reutiliza o pipeline/estilo do Solo (`solo-mode` tambem
+   * fica ligado -- ver main.js), entao esta classe so serve para as
+   * regras de CSS (client/css/style.css) que precisam REEXIBIR a area
+   * do player2 (escondida pelo Solo) e, aqui, para trocar o rotulo
+   * exibido nela de volta e para frente -- nenhum elemento novo e
+   * criado/removido do DOM, e nada muda para o Solo puro (sem Bot).
+   *
+   * ETAPA 14D — PARTE 2B: agora aceita tambem `difficulty`
+   * ("EASY"/"MEDIUM"/"HARD", ver ClientConfig.BOT_DIFFICULTY) para
+   * deixar claro, durante a partida, qual dificuldade foi escolhida --
+   * reaproveitando a MESMA area do player2 (`player2NameDisplay`),
+   * nunca uma segunda area de gameplay. Quando `difficulty` e
+   * omitido/desconhecido, mostra so "BOT" (mesmo texto de antes) --
+   * nenhum comportamento antigo quebra.
+   *
+   * @param {boolean} isBot
+   * @param {string} [difficulty]
+   */
+  function setBotMode(isBot, difficulty) {
+    document.documentElement.classList.toggle('bot-mode', Boolean(isBot));
+    document.body.classList.toggle('bot-mode', Boolean(isBot));
+
+    if (el.player2NameDisplay) {
+      if (isBot) {
+        const label = BOT_DIFFICULTY_LABELS[difficulty];
+        el.player2NameDisplay.textContent = label ? `BOT — ${label}` : 'BOT';
+      } else {
+        el.player2NameDisplay.textContent = DEFAULT_PLAYER2_NAME;
+      }
+    }
+  }
+
+  /**
+   * ETAPA 14D — PARTE 2B: mostra o painel "Escolha a dificuldade"
+   * (ver client/index.html#bot-difficulty-panel). So alterna a classe
+   * `hidden`, mesmo padrao ja usado por showMusicSelection/
+   * hideMusicSelection acima -- nenhum elemento novo e criado/removido
+   * do DOM.
+   */
+  function showBotDifficultySelection() {
+    if (el.botDifficultyPanel) el.botDifficultyPanel.classList.remove('hidden');
+  }
+
+  /**
+   * ETAPA 14D — PARTE 2B: esconde o painel "Escolha a dificuldade",
+   * seja porque o jogador escolheu uma opcao ou porque cancelou.
+   */
+  function hideBotDifficultySelection() {
+    if (el.botDifficultyPanel) el.botDifficultyPanel.classList.add('hidden');
+  }
+
   const api = {
     setConnectionStatus,
     showRoomJoined,
@@ -271,6 +348,9 @@ const UIController = (() => {
     showGameField,
     hideGameField,
     setSoloMode,
+    setBotMode,
+    showBotDifficultySelection,
+    hideBotDifficultySelection,
   };
 
   if (isNode) {
