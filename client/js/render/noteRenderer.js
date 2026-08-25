@@ -97,11 +97,15 @@ const NoteRenderer = (() => {
   /**
    * Posicao vertical (top, em % da altura da lane-track) de uma nota no
    * instante `syncedNow`. Nunca negativa (uma nota nao criada antes do
-   * spawn nao deveria ser posicionada acima do topo).
+   * spawn nao deveria ser posicionada acima do topo) e NUNCA maior que
+   * hitLinePercent -- a nota para visualmente no "quadrado"/hit-zone
+   * (note.time) mesmo que syncedNow continue avancando enquanto o
+   * elemento ainda nao foi removido (ver REMOVE_BUFFER_MS/
+   * shouldRemoveNote acima, que da uma margem antes de tirar do DOM).
    */
   function computeTopPercent(note, syncedNow, travelMs, hitLinePercent) {
     const progress = computeProgress(note, syncedNow, travelMs);
-    return Math.max(0, progress * hitLinePercent);
+    return Math.min(hitLinePercent, Math.max(0, progress * hitLinePercent));
   }
 
   /**
