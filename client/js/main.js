@@ -1153,6 +1153,22 @@
     // => timeline diferente, mantendo a MESMA seed como unico mecanismo
     // de sincronizacao entre os dois jogadores.
     const pattern = resolveSequencePattern(message.match);
+
+    // ETAPA 15C-1C/15C-1D/15C-MP — Parte 2 (movido para ANTES da timeline
+    // nesta Etapa 16-2B, sem nenhuma segunda resolucao): resolve o MESMO
+    // `resolvedMatchDurationMs` usado mais abaixo pelo Bot e pelo
+    // MatchEndDetector -- ver os comentarios detalhados originais deste
+    // calculo logo adiante, no bloco do Bot. So foi reposicionado para
+    // que este UNICO valor ja calculado possa tambem ser repassado a
+    // MatchTimelineManager.ensureTimeline logo abaixo (item 3 da Etapa
+    // 16-2B: "reutilize o resolvedMatchDurationMs que ja existe", "nao
+    // crie uma segunda resolucao da duracao"). O calculo em si continua
+    // exatamente o mesmo, sem nenhuma alteracao de logica.
+    const resolvedMatchDurationMs = MatchDuration.resolveMatchDuration(
+      ClientConfig.MATCH_DURATION_MS,
+      selectedMatchDuration
+    ) ?? (typeof message.match.durationMs === 'number' ? message.match.durationMs : null);
+
     const timeline = MatchTimelineManager.ensureTimeline({
       seed: message.match.seed,
       startTimestamp: message.startTimestamp,
@@ -1166,6 +1182,13 @@
       // modo pode ficar com um comportamento de dificuldade diferente
       // dos outros por acidente.
       difficultyStages: ClientConfig.DIFFICULTY_PROGRESSION.STAGES,
+      // ETAPA 16-2B: MESMO `resolvedMatchDurationMs` usado pelo
+      // MatchEndDetector abaixo (ver bloco do Bot/MatchEndDetector) --
+      // nenhuma segunda fonte de duracao. Quando `null` (Modo
+      // Teste/Multiplayer/Solo/Bot sem duracao configurada), o
+      // MatchTimelineManager preserva o comportamento antigo (timeline-base
+      // normal, sem extensao) -- ver matchTimelineManager.js.
+      durationMs: resolvedMatchDurationMs,
     });
     UIController.logMessage(`Timeline de notas gerada localmente (${timeline.length} notas).`);
 
@@ -1201,49 +1224,16 @@
       sendEvent: SocketClient.send,
     });
 
-    // ETAPA 15C-1C / 15C-1D: resolve o identificador escolhido pelo
-    // jogador (`selectedMatchDuration`, "30S"/"1M"/"5M"/"10M") para
-    // milissegundos usando EXCLUSIVAMENTE MatchDuration.resolveMatchDuration
-    // (Etapa 15A) + ClientConfig.MATCH_DURATION_MS -- nenhuma tabela
-    // nova, nenhum numero magico duplicado aqui. Sem selecao
-    // (`selectedMatchDuration` null/invalido -- caso do Multiplayer real
-    // e do Modo Teste, que nunca abrem o painel de duracao),
-    // `resolveMatchDuration` devolve o `fallbackMs` padrao (`null`),
-    // preservando 100% o comportamento antigo para esses dois modos.
+    // ETAPA 15C-1C / 15C-1D / 15C-MP — Parte 2: resolucao de
+    // `resolvedMatchDurationMs` (identificador escolhido pelo jogador ->
+    // ms via MatchDuration.resolveMatchDuration + ClientConfig.
+    // MATCH_DURATION_MS, com fallback para `message.match.durationMs` do
+    // Multiplayer real) FOI MOVIDA para ANTES da timeline acima nesta
+    // Etapa 16-2B, para que MatchTimelineManager.ensureTimeline tambem
+    // possa reaproveitar o MESMO valor (ver comentario completo no local
+    // original da resolucao, logo acima, junto da timeline). O calculo
+    // em si nao mudou -- so o ponto onde ele acontece.
     //
-    // ETAPA 15C-1D: calculado ANTES do bloco do Bot logo abaixo (antes a
-    // Etapa 15C-1C calculava isso so depois, e zerava explicitamente
-    // para isBotMode) para que o MESMO valor resolvido possa ser
-    // repassado tanto a BotMatchController.createBotMatch quanto ao
-    // MatchEndDetector abaixo -- exatamente o padrao que o Solo ja usa
-    // (Etapa 15C-1C), agora tambem para o Bot. Multiplayer/Modo Teste
-    // continuam de fora: nenhum dos dois define `selectedMatchDuration`,
-    // entao `resolvedMatchDurationMs` continua `null` para eles.
-    //
-    // ETAPA 15C-MP — Parte 2: para o MULTIPLAYER REAL, a duracao passou
-    // a vir do SERVIDOR -- `message.match.durationMs`, ja resolvido la
-    // por matchFlow.js (Etapa 15C-MP — Parte 1), a partir da MESMA
-    // tabela/funcao (ClientConfig.MATCH_DURATION_MS/MatchDuration.
-    // resolveMatchDuration, so que rodando no servidor). Os DOIS
-    // jogadores recebem o MESMO `message.match` (broadcast identico do
-    // servidor), entao os dois calculam exatamente o mesmo
-    // `resolvedMatchDurationMs` aqui -- nenhuma segunda fonte de
-    // verdade. O `??` abaixo so entra em acao quando o valor calculado
-    // a partir de `selectedMatchDuration` for `null`; como Solo/Bot
-    // NUNCA definem `selectedMatchDuration` a partir de uma Match
-    // Multiplayer e o servidor NUNCA atribui `durationMs` a uma Match
-    // Solo/Bot (matchFlow.startMatchFlow so recebe `requestedDurationId`
-    // vindo do fluxo de sala cheia/revanche do Multiplayer real -- ver
-    // messageRouter.js/rematchFlow.js), as duas fontes sao mutuamente
-    // exclusivas por construcao: Solo/Bot continuam usando SOMENTE
-    // `selectedMatchDuration` (comportamento antigo, sem nenhuma
-    // mudanca), e o Multiplayer real passa a usar SOMENTE o valor do
-    // servidor (comportamento novo desta parte).
-    const resolvedMatchDurationMs = MatchDuration.resolveMatchDuration(
-      ClientConfig.MATCH_DURATION_MS,
-      selectedMatchDuration
-    ) ?? (typeof message.match.durationMs === 'number' ? message.match.durationMs : null);
-
     // ETAPA 14C/14D: cria o Bot desta partida SOMENTE quando isBotMode.
     // Reaproveita a MESMA instancia de `timeline` acima (nunca uma
     // copia/segunda geracao) e as MESMAS janelas/pontuacao/penalidades
