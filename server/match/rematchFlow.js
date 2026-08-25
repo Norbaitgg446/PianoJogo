@@ -2,6 +2,7 @@ const MatchManager = require('./MatchManager');
 const { MATCH_STATE } = require('./Match');
 const matchFlow = require('./matchFlow');
 const musicSelectionFlow = require('../music/musicSelectionFlow');
+const matchDurationSelectionFlow = require('./matchDurationSelectionFlow');
 const { broadcastToRoom, sendError } = require('../ws/broadcast');
 
 /**
@@ -161,6 +162,15 @@ function startRematch(room) {
   const newlySelectedMusicId = musicSelectionFlow.resolveSelectedMusicId(room.code);
   const musicIdForRematch = newlySelectedMusicId || previousMusicId;
 
+  // ETAPA 15C-MP — Parte 1: MESMA regra da musica acima, agora para a
+  // duracao -- se os jogadores selecionaram uma NOVA duracao (via
+  // `select_duration`) enquanto aguardavam a revanche, ela tem
+  // prioridade; senao, a revanche reaproveita a duracao da partida
+  // anterior desta sala (nunca a tabela default/nenhuma tabela nova).
+  const previousDurationId = previousMatch ? previousMatch.durationId : null;
+  const newlySelectedDurationId = matchDurationSelectionFlow.resolveSelectedDuration(room.code);
+  const durationIdForRematch = newlySelectedDurationId || previousDurationId;
+
   // Remove a entrada ANTES de criar a nova partida: assim, mesmo que
   // alguma mensagem redundante chegue nesse meio-tempo, nao ha um estado
   // "pendente" para reagir a ela, e uma segunda revanche so pode comecar
@@ -173,14 +183,15 @@ function startRematch(room) {
 
   // Reutiliza o fluxo existente: nova seed, novo startTimestamp, novo
   // countdown sincronizado, transicao READY -> COUNTDOWN -> PLAYING --
-  // so o musicId requisitado muda (nova selecao, se houver, senao a
-  // musica da partida anterior).
-  matchFlow.startMatchFlow(room, musicIdForRematch);
+  // so o musicId/durationId requisitados mudam (nova selecao, se
+  // houver, senao os valores da partida anterior).
+  matchFlow.startMatchFlow(room, musicIdForRematch, undefined, durationIdForRematch);
 
   // A selecao pendente (se havia) ja foi consumida por esta nova
   // Match -- nunca reaproveitada automaticamente por uma proxima
   // revanche sem um novo pedido explicito do jogador.
   musicSelectionFlow.clearRoomSelection(room.code);
+  matchDurationSelectionFlow.clearRoomSelection(room.code);
 }
 
 /**
