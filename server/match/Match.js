@@ -47,6 +47,23 @@ class Match {
     this.speed = null;           // velocidade da partida
     this.seed = null;            // seed usada para gerar a partida (definida pelo servidor)
 
+    // ---- Duracao da partida (ETAPA 15C-MP — Parte 1) ----
+    // `durationId` e um dos identificadores estaveis de
+    // ClientConfig.MATCH_DURATION_IDS ("30S"/"1M"/"5M"/"10M", ver
+    // client/js/config.js) ou `null` quando nenhuma duracao valida foi
+    // selecionada para esta partida (mesmo significado de "sem duracao
+    // configurada" que Solo/Bot ja usam). `durationMs` e o valor em
+    // milissegundos correspondente, resolvido EXCLUSIVAMENTE via
+    // MatchDuration.resolveMatchDuration (client/js/match/matchDuration.js)
+    // + ClientConfig.MATCH_DURATION_MS -- nunca uma tabela paralela.
+    // Preenchidos uma unica vez por matchFlow.startMatchFlow, no mesmo
+    // momento em que musicId/music/difficulty/speed sao definidos --
+    // nunca alterados depois. NAO usados ainda para encerrar a partida
+    // (isso fica para uma proxima parte): por enquanto sao apenas
+    // transportados ate os dois jogadores via toPublicJSON.
+    this.durationId = null;
+    this.durationMs = null;
+
     // ---- Musica (Etapa 10A) ----
     // musicId/music vem do catalogo central (server/music/musicCatalog.js),
     // nunca escritos aqui diretamente -- quem preenche e matchFlow.js,
@@ -132,6 +149,8 @@ class Match {
       song: this.song,
       difficulty: this.difficulty,
       speed: this.speed,
+      durationId: this.durationId,
+      durationMs: this.durationMs,
       musicId: this.musicId,
       music: this.music,
       players: this.players,
