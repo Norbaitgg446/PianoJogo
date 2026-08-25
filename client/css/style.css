@@ -350,7 +350,11 @@ input[type="text"] {
   font-size: 1.3rem;
   line-height: 1;
   color: #9aa0aa;
-  touch-action: manipulation;
+  /* 'none' (em vez de 'manipulation'): impede o navegador de tentar
+     reconhecer qualquer gesto de arrastar/rolar/zoom nesse botao. Isso
+     elimina a ambiguidade toque-vira-scroll que podia fazer o 'click'
+     sintetico nao disparar no celular (ver inputController.js). */
+  touch-action: none;
 }
 
 /* disabled nesta etapa (sem integracao com GameplayEngine ainda) --
