@@ -150,6 +150,12 @@ const BotMatchController = (() => {
    * @param {{MISTAKE?:number, MISS?:number}} [options.penalties] - ex:
    *   ClientConfig.PENALTIES. Repassado diretamente para
    *   PlayerState.registerMiss/registerMistake.
+   * @param {number} [options.durationMs] - ETAPA 15A (PARTE 1): apenas
+   *   armazenado em `botMatch.durationMs` para uso de uma proxima parte
+   *   da Etapa 15 -- nada neste modulo LE este valor ainda (o Bot
+   *   continua decidindo/agindo em `tick()` exatamente como antes,
+   *   independente de duracao). Omitido => `undefined`, sem nenhuma
+   *   mudanca de comportamento.
    * @returns {object} o novo estado interno (`botMatch`)
    */
   function buildBotMatch(options) {
@@ -179,6 +185,7 @@ const BotMatchController = (() => {
       scoreValues: opts.scoreValues,
       comboMultiplierTiers: opts.comboMultiplierTiers,
       penalties: opts.penalties,
+      durationMs: opts.durationMs,
       playerState: PlayerStateRef.createPlayerState(),
       entries,
       finished: false,
@@ -388,6 +395,10 @@ const BotMatchController = (() => {
       comboMultiplierTiers:
         opts.comboMultiplierTiers !== undefined ? opts.comboMultiplierTiers : botMatch.comboMultiplierTiers,
       penalties: opts.penalties !== undefined ? opts.penalties : botMatch.penalties,
+      // ETAPA 15A (PARTE 1): mesmo tratamento retrocompativel dos campos
+      // acima -- preserva o durationMs anterior se nenhum novo for
+      // informado neste reset.
+      durationMs: opts.durationMs !== undefined ? opts.durationMs : botMatch.durationMs,
     });
 
     Object.assign(botMatch, renewed);
