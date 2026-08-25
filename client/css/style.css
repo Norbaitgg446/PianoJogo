@@ -157,6 +157,19 @@ input[type="text"] {
   text-align: center;
   padding: 12px 0;
   color: #3d7eff;
+  /* #game-field e position:fixed (stacking context proprio) e e
+     inserido DEPOIS deste elemento no HTML; um elemento estatico
+     (sem position) sempre fica ATRAS de um elemento posicionado,
+     entao sem isto o "3, 2, 1, VAI!" fica escondido atras do fundo
+     solido do campo de jogo assim que ele e revelado. Posicionar e
+     dar z-index acima do game-field (que nao define um -- fica em
+     auto/0) resolve, no mesmo padrao ja usado por .result-screen. */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  pointer-events: none;
 }
 
 #message-log {
