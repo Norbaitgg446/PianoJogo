@@ -27,6 +27,30 @@ const MatchController = (() => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Funcoes PURAS (sem timer/DOM) -- extraidas de dentro de tick() so
+  // para serem testaveis isoladamente em Node (ETAPA 15), no mesmo
+  // padrao ja usado por NoteRenderer._internal. O comportamento de
+  // startCountdown abaixo continua exatamente o mesmo -- estas funcoes
+  // so tornam a MESMA formula que ja existia inspecionavel por testes,
+  // sem duplicar nenhuma logica nova.
+  // ---------------------------------------------------------------------
+
+  /** "Agora" estimado no relogio do servidor, dado o offset ja calculado. */
+  function computeEstimatedServerNow(localNow, clockOffset) {
+    return localNow + clockOffset;
+  }
+
+  /** Quanto falta (ms) para startTimestamp, a partir do "agora" estimado. */
+  function computeRemainingMs(startTimestamp, estimatedServerNow) {
+    return startTimestamp - estimatedServerNow;
+  }
+
+  /** Segundo inteiro (3,2,1...) exibido para um remainingMs > 0 dado. */
+  function computeSecondsRemaining(remainingMs) {
+    return Math.ceil(remainingMs / 1000);
+  }
+
   /**
    * @param {{startTimestamp:number, serverTime:number}} data
    * @param {(secondsRemaining:number) => void} onTick chamado a cada atualizacao com o segundo atual (3,2,1)
@@ -39,8 +63,8 @@ const MatchController = (() => {
     let lastWholeSecondShown = null;
 
     function tick() {
-      const estimatedServerNow = Date.now() + clockOffset;
-      const remainingMs = data.startTimestamp - estimatedServerNow;
+      const estimatedServerNow = computeEstimatedServerNow(Date.now(), clockOffset);
+      const remainingMs = computeRemainingMs(data.startTimestamp, estimatedServerNow);
 
       if (remainingMs <= 0) {
         stopCountdown();
@@ -48,7 +72,7 @@ const MatchController = (() => {
         return;
       }
 
-      const secondsRemaining = Math.ceil(remainingMs / 1000);
+      const secondsRemaining = computeSecondsRemaining(remainingMs);
       if (secondsRemaining !== lastWholeSecondShown) {
         lastWholeSecondShown = secondsRemaining;
         onTick(secondsRemaining);
@@ -62,6 +86,7 @@ const MatchController = (() => {
   }
 
   const api = { startCountdown, stopCountdown };
+  api._internal = { computeEstimatedServerNow, computeRemainingMs, computeSecondsRemaining };
 
   if (isNode) {
     module.exports = api;
