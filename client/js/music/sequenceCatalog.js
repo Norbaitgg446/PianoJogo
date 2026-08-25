@@ -101,18 +101,21 @@ const SequenceCatalog = (() => {
   // em server/music/sequenceCatalog.js. Qualquer alteracao ali precisa
   // ser replicada aqui, ou os dois lados deixam de montar a mesma
   // timeline a partir do mesmo sequenceId. ----
+  // ETAPA 15 — leadInMs elevado de 1000 para 1800 (= NOTE_TRAVEL_MS),
+  // mantido identico ao server/music/sequenceCatalog.js. Ver
+  // ClientConfig.NOTE_LEAD_IN_MS para a explicacao completa do motivo.
   registerPattern('seq-basic-01', {
     length: 16,
     noteRange: 3,
     noteIntervalMs: 600,
-    leadInMs: 1000,
+    leadInMs: 1800,
   });
 
   registerPattern('seq-basic-02', {
     length: 24,
     noteRange: 3,
     noteIntervalMs: 500,
-    leadInMs: 1000,
+    leadInMs: 1800,
   });
 
   return {
