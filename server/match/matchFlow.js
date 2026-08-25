@@ -11,6 +11,13 @@ const {
   DEFAULT_MUSIC_ID,
 } = require('../config');
 const { broadcastToRoom } = require('../ws/broadcast');
+// ETAPA 15C-MP — Parte 1: reutiliza EXCLUSIVAMENTE os mesmos modulos ja
+// usados pelo Solo/Bot para resolver duracao -- ClientConfig.MATCH_DURATION_MS
+// (tabela de duracoes, client/js/config.js) e
+// MatchDuration.resolveMatchDuration (client/js/match/matchDuration.js).
+// Nenhuma tabela nova, nenhum numero magico duplicado aqui.
+const ClientConfig = require('../../client/js/config');
+const MatchDuration = require('../../client/js/match/matchDuration');
 
 // ETAPA 12A: idempotencia do `match_result` do modo Solo (equivalente
 // ao que `matchOutcome.hasFinalOutcome` ja garante para multiplayer).
@@ -41,6 +48,36 @@ function normalizeRequestedMusicId(requestedMusicId) {
 }
 
 /**
+ * Normaliza o durationId solicitado para a criacao de uma Match
+ * (ETAPA 15C-MP — Parte 1).
+ *
+ * Regra (mesmo espirito de `normalizeRequestedMusicId` acima, mas SEM
+ * lancar erro para um valor invalido -- ao contrario da musica, uma
+ * duracao invalida/ausente ja tem um comportamento seguro e existente
+ * para cair: "sem duracao configurada", exatamente como Solo/Bot fazem
+ * quando o identificador escolhido pelo jogador e null): `undefined`/`null`/string
+ * vazia/qualquer identificador que nao exista em
+ * ClientConfig.MATCH_DURATION_MS viram `null` -- NUNCA confiamos
+ * cegamente no cliente. Um identificador valido (ja deveria ter sido
+ * validado tambem por matchDurationSelectionFlow.handleSelectDuration,
+ * mas a checagem aqui e repetida por seguranca/defesa em profundidade)
+ * e devolvido exatamente como recebido.
+ *
+ * @param {string|undefined|null} requestedDurationId
+ * @returns {string|null} o durationId normalizado, ou `null` se nao
+ *   especificado/invalido.
+ */
+function normalizeRequestedDurationId(requestedDurationId) {
+  if (typeof requestedDurationId !== 'string') return null;
+  const trimmed = requestedDurationId.trim();
+  if (trimmed === '') return null;
+  if (!Object.prototype.hasOwnProperty.call(ClientConfig.MATCH_DURATION_MS, trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
  * Chamado quando uma sala atinge 2 jogadores conectados (ou por
  * rematchFlow.startRematch, ao iniciar uma revanche). Cria (ou recria)
  * a partida daquela sala, define a seed/musica e inicia o fluxo:
@@ -59,8 +96,18 @@ function normalizeRequestedMusicId(requestedMusicId) {
  *   sequencia, timeline, READY -> COUNTDOWN -> PLAYING) -- so marca
  *   `match.mode`, para que outras camadas (ex: finishMatch, mais
  *   abaixo) saibam nao tratar esta partida como um confronto P1 vs P2.
+ * @param {string} [requestedDurationId] - ETAPA 15C-MP — Parte 1:
+ *   identificador de duracao ("30S"/"1M"/"5M"/"10M") resolvido pelo
+ *   chamador (ex: matchDurationSelectionFlow.resolveSelectedDuration
+ *   para Multiplayer real, ou a duracao da partida anterior para uma
+ *   revanche). Se omitido/vazio/invalido, a Match fica com
+ *   `durationId`/`durationMs` ambos `null` -- exatamente o
+ *   comportamento atual de "sem duracao configurada" (nenhuma partida
+ *   termina mais cedo por causa disto ainda). Solo/Bot NUNCA passam por
+ *   aqui: continuam resolvendo/aplicando a duracao inteiramente no
+ *   cliente, sem nenhuma mudanca.
  */
-function startMatchFlow(room, requestedMusicId, mode) {
+function startMatchFlow(room, requestedMusicId, mode, requestedDurationId) {
   const match = new Match(room.code, mode);
 
   // A seed e definida UMA UNICA VEZ pelo servidor e e a mesma para os dois
@@ -103,6 +150,21 @@ function startMatchFlow(room, requestedMusicId, mode) {
   match.speed = TEST_SPEED; // velocidade configuravel fica para uma proxima etapa
   match.noteSequence = noteSequence;
   match._referenceChecksum = referenceChecksum;
+
+  // ETAPA 15C-MP — Parte 1: duracao da partida Multiplayer, resolvida
+  // UMA UNICA VEZ aqui (mesmo momento/mesmo espirito de seed/musica
+  // acima) e transportada para os DOIS jogadores via toPublicJSON --
+  // nenhum dos dois calcula a propria duracao localmente para esta
+  // Match. `resolveMatchDuration` (Etapa 15A) devolve `null` para
+  // qualquer `durationId` nao resolvivel, preservando o comportamento
+  // atual ("sem duracao configurada") ate a proxima parte da etapa
+  // implementar o encerramento por tempo de verdade.
+  match.durationId = normalizeRequestedDurationId(requestedDurationId);
+  match.durationMs = MatchDuration.resolveMatchDuration(
+    ClientConfig.MATCH_DURATION_MS,
+    match.durationId,
+    null
+  );
 
   MatchManager.setMatch(room.code, match);
 
@@ -337,4 +399,7 @@ module.exports = {
   // normalizacao isoladamente, sem precisar montar uma sala/partida
   // completa so para checar "vazio -> default".
   normalizeRequestedMusicId,
+  // Exportado para testes (ETAPA 15C-MP — Parte 1): mesmo raciocinio,
+  // agora para a normalizacao de duracao.
+  normalizeRequestedDurationId,
 };
