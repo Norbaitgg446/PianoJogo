@@ -5,6 +5,7 @@ const matchFlow = require('../match/matchFlow');
 const rematchFlow = require('../match/rematchFlow');
 const matchAbandonment = require('../match/matchAbandonment');
 const musicSelectionFlow = require('../music/musicSelectionFlow');
+const matchDurationSelectionFlow = require('../match/matchDurationSelectionFlow');
 const { send } = require('./broadcast');
 const { routeMessage } = require('./messageRouter');
 const { generatePlayerId } = require('../utils/idGenerator');
@@ -30,6 +31,9 @@ function handleDisconnect(ws) {
   // Etapa 10D: mesma limpeza feita em leaveRoomFlow.js -- uma
   // desconexao tambem nunca deve deixar uma selecao de musica presa.
   musicSelectionFlow.clearPlayerSelection(roomCode, slot);
+  // ETAPA 15C-MP — Parte 1: mesma limpeza, agora tambem para a
+  // selecao de duracao.
+  matchDurationSelectionFlow.clearPlayerSelection(roomCode, slot);
 
   const opponent = room.getOpponentConnection(slot);
   send(opponent, {
@@ -63,6 +67,7 @@ function handleDisconnect(ws) {
     RoomManager.deleteRoom(room.code);
     MatchManager.removeMatch(room.code);
     musicSelectionFlow.clearRoomSelection(room.code);
+    matchDurationSelectionFlow.clearRoomSelection(room.code);
   }
 }
 
