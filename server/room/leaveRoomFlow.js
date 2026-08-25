@@ -52,6 +52,7 @@ const matchFlow = require('../match/matchFlow');
 const rematchFlow = require('../match/rematchFlow');
 const matchAbandonment = require('../match/matchAbandonment');
 const musicSelectionFlow = require('../music/musicSelectionFlow');
+const matchDurationSelectionFlow = require('../match/matchDurationSelectionFlow');
 const { send, sendError } = require('../ws/broadcast');
 
 /**
@@ -96,6 +97,9 @@ function handleLeaveRoom(ws) {
   // -- nem para quem saiu (nao faz mais sentido usa-la) nem, se a sala
   // ficar vazia, para a sala inteira (ver abaixo).
   musicSelectionFlow.clearPlayerSelection(roomCode, slot);
+  // ETAPA 15C-MP — Parte 1: mesma limpeza, agora tambem para a
+  // selecao de duracao (nunca deve ficar presa a um jogador que saiu).
+  matchDurationSelectionFlow.clearPlayerSelection(roomCode, slot);
 
   const opponent = room.getOpponentConnection(slot);
   send(opponent, {
@@ -126,6 +130,7 @@ function handleLeaveRoom(ws) {
     RoomManager.deleteRoom(room.code);
     MatchManager.removeMatch(room.code);
     musicSelectionFlow.clearRoomSelection(room.code);
+    matchDurationSelectionFlow.clearRoomSelection(room.code);
   }
 
   // Confirma para quem saiu que a saida foi concluida (payload minimo).
