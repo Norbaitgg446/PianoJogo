@@ -36,10 +36,33 @@
  * fazer no callback `onMatchEnd` (parar loops, bloquear input, etc).
  * Isso mantem a deteccao 100% testavel em Node puro, isolada do resto
  * do ciclo de vida da partida.
+ *
+ * ETAPA 15A (PARTE 1): `createMatchEndDetector` agora tambem aceita um
+ * `durationMs` opcional, apenas armazenado (ver `getDurationMs()`) para
+ * uma proxima parte da Etapa 15 usar. Regra de termino continua sendo
+ * SOMENTE a timeline (acima) -- nenhuma partida termina mais cedo por
+ * causa de `durationMs` ainda.
+ *
+ * ETAPA 15C-1B: `checkForEnd` agora tambem considera a duracao maxima,
+ * reutilizando `MatchDuration.hasReachedMatchDuration` (nenhuma logica
+ * de tempo duplicada aqui -- ver matchDuration.js). A regra conceitual
+ * passa a ser "timeline terminou OU duracao maxima foi atingida", mas
+ * SOMENTE quando o chamador fornece os tres ingredientes necessarios
+ * (`startTime` na criacao do detector, `durationMs` na criacao do
+ * detector, e `currentTime` em cada chamada de `checkForEnd`). Sem
+ * qualquer um desses tres, `hasReachedMatchDuration` recebe argumento(s)
+ * `undefined` e devolve `false` (ver sua propria defensividade), entao
+ * o comportamento antigo (fim SOMENTE pela timeline) e preservado
+ * automaticamente -- nenhum "if" extra precisou ser escrito para isso.
+ *
+ * Este modulo continua SEM relogio proprio: nunca le o relogio do
+ * sistema nem inicia timers/intervalos. `currentTime` e sempre o que o
+ * chamador decidir passar para `checkForEnd(currentTime)`.
  */
 const MatchEndDetector = (() => {
   const isNode = typeof module !== 'undefined' && module.exports;
   const NoteEngineRef = isNode ? require('./noteEngine') : NoteEngine;
+  const MatchDurationRef = isNode ? require('./matchDuration') : MatchDuration;
 
   /**
    * Se TODAS as notas da timeline ja estao em estado terminal
@@ -68,15 +91,38 @@ const MatchEndDetector = (() => {
    * @param {() => void} [options.onMatchEnd] - chamado exatamente UMA vez,
    *   na primeira chamada de checkForEnd() em que a timeline estiver
    *   inteiramente concluida.
+   * @param {number} [options.durationMs] - ETAPA 15A (PARTE 1) / 15C-1B:
+   *   duracao maxima (ms) desta partida. Sem `startTime` (abaixo) e sem
+   *   `currentTime` (passado a cada `checkForEnd`), fica apenas
+   *   armazenado (ver `getDurationMs()`), sem nenhum efeito -- exatamente
+   *   como na Etapa 15A. Omitido => `undefined`, sem nenhuma mudanca de
+   *   comportamento.
+   * @param {number} [options.startTime] - ETAPA 15C-1B: instante em que a
+   *   partida comecou, na MESMA unidade/relogio que sera passado como
+   *   `currentTime` a `checkForEnd`. So e usado junto com `durationMs`
+   *   para calcular se a duracao maxima foi atingida (via
+   *   `MatchDuration.hasReachedMatchDuration`); nunca lido do relogio do
+   *   sistema por este modulo. Omitido => `undefined`, sem nenhuma
+   *   mudanca de comportamento.
    */
-  function createMatchEndDetector({ timeline, onMatchEnd }) {
+  function createMatchEndDetector({ timeline, onMatchEnd, durationMs, startTime }) {
     const emit = typeof onMatchEnd === 'function' ? onMatchEnd : () => {};
     let ended = false;
 
     /**
-     * Verifica se a timeline terminou e, se for a PRIMEIRA vez que isso
-     * e detectado, dispara `onMatchEnd` e marca a partida como
-     * encerrada.
+     * Verifica se a partida deve ser considerada encerrada e, se for a
+     * PRIMEIRA vez que isso e detectado, dispara `onMatchEnd` e marca a
+     * partida como encerrada.
+     *
+     * Encerra quando: a timeline terminou (todas as notas em estado
+     * terminal, como sempre) OU a duracao maxima foi atingida (ETAPA
+     * 15C-1B, via `MatchDuration.hasReachedMatchDuration` -- reutilizada
+     * aqui, nunca reimplementada). A checagem de duracao so acontece
+     * quando `durationMs`/`startTime` (fornecidos na criacao) e
+     * `currentTime` (fornecido aqui) estao TODOS presentes; caso
+     * contrario `hasReachedMatchDuration` devolve `false` por sua propria
+     * defensividade, preservando o comportamento antigo (fim SOMENTE
+     * pela timeline) sem nenhuma logica condicional extra neste modulo.
      *
      * Seguro chamar quantas vezes for preciso (ex: a cada frame do
      * mesmo loop que ja varre notas expiradas) -- depois da primeira
@@ -84,13 +130,28 @@ const MatchEndDetector = (() => {
      * evento, o que impede: finalizar duas vezes, disparar multiplos
      * eventos, ou criar multiplos timers a partir do callback.
      *
+     * @param {number} [currentTime] - ETAPA 15C-1B: instante atual, na
+     *   MESMA unidade/relogio de `startTime`. Este modulo NUNCA le esse
+     *   valor sozinho (sem ler relogio do sistema) -- quem chama
+     *   `checkForEnd` e responsavel por fornece-lo. Omitido => nenhuma
+     *   checagem de duracao acontece nesta chamada (equivalente a nao
+     *   informar `durationMs`).
      * @returns {boolean} true somente na chamada que efetivamente
      *   detectou e disparou o fim da partida; false em qualquer outro
-     *   caso (partida ja encerrada antes, ou ainda ha nota pendente/ativa).
+     *   caso (partida ja encerrada antes, ou ainda nao atingiu nenhuma
+     *   das duas condicoes de termino).
      */
-    function checkForEnd() {
+    function checkForEnd(currentTime) {
       if (ended) return false;
-      if (!isTimelineFinished(timeline)) return false;
+
+      const timelineDone = isTimelineFinished(timeline);
+      const durationReached = MatchDurationRef.hasReachedMatchDuration(
+        currentTime,
+        startTime,
+        durationMs
+      );
+
+      if (!timelineDone && !durationReached) return false;
 
       ended = true;
       emit();
@@ -114,7 +175,16 @@ const MatchEndDetector = (() => {
       ended = false;
     }
 
-    return { checkForEnd, hasEnded, reset };
+    /**
+     * ETAPA 15A (PARTE 1): devolve o `durationMs` recebido na criacao
+     * deste detector (ou `undefined` se nenhum foi informado). So
+     * leitura -- nada dentro deste modulo consome este valor ainda.
+     */
+    function getDurationMs() {
+      return durationMs;
+    }
+
+    return { checkForEnd, hasEnded, reset, getDurationMs };
   }
 
   const api = { isTimelineFinished, createMatchEndDetector };
