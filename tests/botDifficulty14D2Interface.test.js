@@ -158,9 +158,17 @@ test('o handler das opcoes de dificuldade usa o proprio data-difficulty do botao
     optionsBlock.includes('UIController.hideBotDifficultySelection()'),
     'escolher uma dificuldade precisa fechar a tela de selecao'
   );
+  // ETAPA 15B: escolher uma dificuldade NAO inicia mais a partida
+  // diretamente -- so abre, em seguida, a tela "Escolha a duração da
+  // partida". start_solo_match so e enviado quando o jogador escolher
+  // (ou cancelar) uma duracao (ver tests/matchDurationSelection15B.test.js).
   assert.ok(
-    optionsBlock.includes("SocketClient.send('start_solo_match')"),
-    'escolher uma dificuldade precisa, so ENTAO, iniciar a partida (mesmo pipeline ja existente)'
+    optionsBlock.includes('UIController.showMatchDurationSelection()'),
+    'ETAPA 15B: escolher uma dificuldade precisa abrir a tela "Escolha a duração da partida"'
+  );
+  assert.ok(
+    !optionsBlock.includes("SocketClient.send('start_solo_match')"),
+    'ETAPA 15B: escolher uma dificuldade NAO deve mais iniciar a partida diretamente -- isso agora acontece so ao escolher uma duracao'
   );
 });
 
