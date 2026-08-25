@@ -172,6 +172,217 @@ const NoteEngine = (() => {
     });
   }
 
+  /**
+   * ETAPA 16-2A — Preparacao da geracao continua de notas.
+   *
+   * IMPORTANTE: esta etapa e SOMENTE preparacao. Nenhum modo de jogo
+   * (Solo/Bot/Multiplayer) chama estas funcoes ainda -- isso fica para
+   * uma proxima etapa (integracao com MatchTimelineManager/main.js).
+   *
+   * Calcula quantas notas sao necessarias para que a ULTIMA nota da
+   * timeline cubra pelo menos `durationMs` (relativo ao startTimestamp
+   * da partida), reaproveitando a MESMA formula de acumulo de tempo ja
+   * usada por `generateNoteTimeline` acima (leadInMs + soma dos
+   * intervalos, cada um encolhido pelo `resolveSpeedMultiplier` vigente
+   * -- nenhuma logica de tempo nova ou duplicada com significado
+   * diferente).
+   *
+   * Funcao PURA: nao le relogio nenhum (nunca `Date.now()`), nao usa
+   * `setTimeout`/`setInterval`, e sempre devolve o mesmo resultado para
+   * a mesma entrada -- e so um calculo matematico determinístico feito
+   * inteiramente a partir dos parametros recebidos.
+   *
+   * NUNCA devolve menos que `length` (o padrao-base nunca e encurtado
+   * por esta funcao) -- se `durationMs` nao for informado/invalido, ou
+   * se a duracao pedida for menor que o tempo que o proprio padrao-base
+   * ja ocupa, o resultado e simplesmente `length` (equivalente a nao
+   * estender nada, o comportamento atual).
+   *
+   * @param {object} options
+   * @param {number} options.length - tamanho do padrao-base (ex: 16/24).
+   * @param {number} options.noteIntervalMs - intervalo BASE (ms) entre notas.
+   * @param {number} [options.leadInMs] - atraso (ms) antes da primeira nota. Default 0.
+   * @param {number} [options.durationMs] - duracao (ms) que a timeline deve cobrir.
+   *   Omitido/invalido/<=0 => devolve `length` (nenhuma extensao).
+   * @param {Array<{notesPlayed:number, speedMultiplier:number}>} [options.difficultyStages] -
+   *   MESMA progressao de dificuldade ja usada por generateNoteTimeline
+   *   (ver ClientConfig.DIFFICULTY_PROGRESSION.STAGES). Omitido => cada
+   *   intervalo permanece EXATAMENTE `noteIntervalMs` (igual a antes).
+   * @returns {number} quantidade total de notas necessarias (>= length).
+   */
+  function computeNoteCountForDuration({ length, noteIntervalMs, leadInMs = 0, durationMs, difficultyStages }) {
+    if (!Number.isInteger(length) || length <= 0) {
+      throw new Error('NoteEngine: length invalido.');
+    }
+    if (!Number.isFinite(noteIntervalMs) || noteIntervalMs <= 0) {
+      throw new Error('NoteEngine: noteIntervalMs invalido.');
+    }
+
+    // Sem duracao valida para cobrir: preserva o comportamento atual
+    // (somente o padrao-base, nenhuma extensao).
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return length;
+    }
+
+    // Acumula o mesmo jeito que generateNoteTimeline (elapsedMs comeca
+    // em 0 para o indice 0; a partir do indice 1, soma noteIntervalMs
+    // dividido pelo multiplicador vigente daquele indice). Continua
+    // avancando enquanto: (a) a ULTIMA nota contada ainda nao cobre
+    // `durationMs`, OU (b) ainda nao atingiu o minimo de `length`
+    // notas (o padrao-base nunca pode ficar mais curto por causa desta
+    // funcao).
+    let elapsedMs = 0;
+    let index = 0; // indice da ULTIMA nota ja contada (0-based)
+
+    while (leadInMs + elapsedMs < durationMs || index < length - 1) {
+      index += 1;
+      const speedMultiplier = resolveSpeedMultiplier(index, difficultyStages);
+      elapsedMs += noteIntervalMs / speedMultiplier;
+    }
+
+    return index + 1; // total de notas (index e 0-based)
+  }
+
+  /**
+   * ETAPA 16-2A — Estende/repete deterministicamente um padrao-base de
+   * notas ja existente, produzindo uma timeline MAIOR sem introduzir
+   * nenhuma nova fonte de aleatoriedade.
+   *
+   * NAO substitui nem altera `generateNoteTimeline` (que continua
+   * sendo, sozinha, a unica forma de gerar a sequencia-base de
+   * `length` notas usada pelo checksum/validacao existente -- ver
+   * SequenceGenerator.generateSequence/calculateChecksum e
+   * server/match/matchSequenceResolver.js). Esta funcao so REUTILIZA
+   * essa MESMA sequencia-base (chamando exatamente a mesma
+   * `SequenceGeneratorRef.generateSequence(seed, length, noteRange)`)
+   * e a REPETE CICLICAMENTE (`baseSequence[index % length]`) para
+   * preencher os indices adicionais -- a lane da nota `length` e
+   * sempre igual a lane da nota `0`, a nota `length + 1` igual a nota
+   * `1`, e assim por diante, sempre na MESMA ordem relativa do
+   * padrao-base.
+   *
+   * GARANTIAS (cobertas pelos testes desta etapa):
+   * - Determinismo: mesma entrada (seed/length/noteRange/... e o mesmo
+   *   `totalLength`/`durationMs`) sempre produz a MESMA timeline.
+   * - Ordem temporal crescente: `time` de cada nota e estritamente
+   *   maior que o da anterior (mesma acumulacao de `generateNoteTimeline`).
+   * - Intervalo preservado: o espacamento entre notas continua vindo de
+   *   `noteIntervalMs` (encolhido pela mesma `resolveSpeedMultiplier`
+   *   de sempre) -- nenhum novo calculo de intervalo.
+   * - `noteRange`: toda lane devolvida sempre veio originalmente de
+   *   `baseSequence` (gerada com aquele `noteRange`), entao nunca sai
+   *   do intervalo [1, noteRange].
+   * - Estrutura da nota: cada item continua `{id, index, lane, time,
+   *   state}`, exatamente como `generateNoteTimeline`.
+   * - Nao destroi nem modifica a geracao da sequencia-base: o array
+   *   `baseSequence` usado aqui e o RESULTADO da mesma chamada que
+   *   `generateNoteTimeline` faria para os primeiros `length` indices
+   *   -- os primeiros `length` elementos da timeline devolvida aqui
+   *   sao equivalentes (mesma lane, mesmo tempo) aos que
+   *   `generateNoteTimeline({ seed, startTimestamp, length, noteRange,
+   *   noteIntervalMs, leadInMs, difficultyStages })` devolveria,
+   *   preservando a possibilidade de validar o checksum do padrao-base
+   *   normalmente.
+   *
+   * Funcao PURA: sem DOM, sem relogio do sistema, sem
+   * `setTimeout`/`setInterval`, sem `Math.random()`.
+   *
+   * ETAPA 16-2A (item 7 do enunciado): esta funcao NAO e chamada por
+   * nenhum modo de jogo ainda -- nem MatchTimelineManager, nem main.js,
+   * nem botMatchController.js referenciam `generateExtendedTimeline`.
+   * A integracao fica para uma proxima etapa.
+   *
+   * @param {object} options - mesmos campos base de generateNoteTimeline
+   *   (seed, startTimestamp, length, noteRange, noteIntervalMs,
+   *   leadInMs, difficultyStages), MAIS um dos dois abaixo:
+   * @param {number} [options.totalLength] - quantidade total de notas
+   *   desejada (inteiro > 0). Se menor que `length`, e elevado para
+   *   `length` (o padrao-base nunca e encurtado).
+   * @param {number} [options.durationMs] - duracao (ms) que a timeline
+   *   deve cobrir; usado para CALCULAR `totalLength` via
+   *   `computeNoteCountForDuration` quando `totalLength` nao for
+   *   informado diretamente.
+   * @returns {Array<{id:string,index:number,lane:number,time:number,state:string}>}
+   */
+  function generateExtendedTimeline({
+    seed,
+    startTimestamp,
+    length,
+    noteRange,
+    noteIntervalMs,
+    leadInMs = 0,
+    difficultyStages,
+    totalLength,
+    durationMs,
+  }) {
+    // Mesmas validacoes de base de generateNoteTimeline, duplicadas de
+    // proposito aqui (em vez de reaproveitar o corpo daquela funcao)
+    // para nao alterar/tocar em generateNoteTimeline de forma alguma.
+    if (!Number.isFinite(seed)) {
+      throw new Error('NoteEngine: seed invalida.');
+    }
+    if (!Number.isFinite(startTimestamp)) {
+      throw new Error('NoteEngine: startTimestamp invalido.');
+    }
+    if (!Number.isInteger(length) || length <= 0) {
+      throw new Error('NoteEngine: length invalido.');
+    }
+    if (!Number.isInteger(noteRange) || noteRange <= 0) {
+      throw new Error('NoteEngine: noteRange invalido.');
+    }
+    if (!Number.isFinite(noteIntervalMs) || noteIntervalMs <= 0) {
+      throw new Error('NoteEngine: noteIntervalMs invalido.');
+    }
+
+    // Resolve quantas notas o resultado final deve ter: `totalLength`
+    // explicito tem prioridade (nunca abaixo de `length`); caso
+    // contrario, deriva de `durationMs` (ou cai em `length` se nenhum
+    // dos dois for informado -- equivalente a nao estender nada).
+    let resolvedTotalLength;
+    if (Number.isInteger(totalLength) && totalLength > 0) {
+      resolvedTotalLength = Math.max(totalLength, length);
+    } else {
+      resolvedTotalLength = computeNoteCountForDuration({
+        length,
+        noteIntervalMs,
+        leadInMs,
+        durationMs,
+        difficultyStages,
+      });
+    }
+
+    // Sequencia-base: EXATAMENTE a mesma chamada que generateNoteTimeline
+    // faria (mesma seed, mesmo length, mesmo noteRange) -- nunca gerada
+    // com um length maior. Isso e o que preserva o checksum: quem
+    // validar apenas os primeiros `length` indices desta timeline
+    // estendida ve a mesma sequencia-base de sempre.
+    const baseSequence = SequenceGeneratorRef.generateSequence(seed, length, noteRange);
+
+    let elapsedMs = 0;
+    const timeline = [];
+    for (let index = 0; index < resolvedTotalLength; index++) {
+      if (index > 0) {
+        const speedMultiplier = resolveSpeedMultiplier(index, difficultyStages);
+        elapsedMs += noteIntervalMs / speedMultiplier;
+      }
+
+      // Repeticao ciclica e deterministica do padrao-base -- nenhuma
+      // nova fonte de aleatoriedade, nenhuma chamada extra a
+      // generateSequence/Math.random().
+      const lane = baseSequence[index % length];
+
+      timeline.push({
+        id: buildNoteId(seed, index),
+        index,
+        lane,
+        time: startTimestamp + leadInMs + elapsedMs,
+        state: NOTE_STATE.PENDING,
+      });
+    }
+
+    return timeline;
+  }
+
   function getNoteById(timeline, noteId) {
     return timeline.find((note) => note.id === noteId) || null;
   }
@@ -268,6 +479,11 @@ const NoteEngine = (() => {
     isTerminal,
     // ETAPA 13E — exposta para teste automatizado direto (funcao pura).
     resolveSpeedMultiplier,
+    // ETAPA 16-2A — preparacao da geracao continua de notas (ainda NAO
+    // conectada a nenhum modo de jogo). Expostas para teste automatizado
+    // direto, no mesmo espirito de resolveSpeedMultiplier acima.
+    computeNoteCountForDuration,
+    generateExtendedTimeline,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
