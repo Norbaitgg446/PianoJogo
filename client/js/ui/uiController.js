@@ -30,6 +30,8 @@ const UIController = (() => {
     player2NameDisplay: document.getElementById('player2-name'),
     // ETAPA 14D — PARTE 2B: painel de selecao de dificuldade do Bot.
     botDifficultyPanel: document.getElementById('bot-difficulty-panel'),
+    // ETAPA 15B: painel de selecao de duracao da partida.
+    matchDurationPanel: document.getElementById('match-duration-panel'),
   };
 
   // ETAPA 14D — PARTE 2B: rotulos exibidos (pt-BR) para cada
@@ -124,16 +126,46 @@ const UIController = (() => {
     el.matchSeedDisplay.textContent = seed;
   }
 
+  // ETAPA 15 — quanto tempo (ms) o "VAI!" fica visivel antes de sumir
+  // sozinho. Puramente cosmetico: NAO atrasa nem bloqueia o inicio do
+  // gameplay de forma alguma -- startMatchGameplay (main.js) e chamado
+  // direto pela mensagem `match_started`, nunca por este timer. Se o
+  // timer nem disparar (troca rapida de tela), a proxima chamada a
+  // showCountdownTick/hideCountdown ja limpa qualquer resquicio.
+  const COUNTDOWN_FINISHED_HIDE_MS = 600;
+  let countdownHideTimeoutId = null;
+
+  function clearCountdownHideTimeout() {
+    if (countdownHideTimeoutId !== null) {
+      clearTimeout(countdownHideTimeoutId);
+      countdownHideTimeoutId = null;
+    }
+  }
+
   function showCountdownTick(secondsRemaining) {
+    // Uma nova contagem regressiva comecou (ex: revanche) -- qualquer
+    // timer pendente de esconder o "VAI!" de uma partida anterior nao
+    // pode mais disparar por cima desta.
+    clearCountdownHideTimeout();
     el.countdownDisplay.classList.remove('hidden');
     el.countdownDisplay.textContent = secondsRemaining;
   }
 
   function showCountdownFinished() {
-    el.countdownDisplay.textContent = 'INICIAR';
+    clearCountdownHideTimeout();
+    el.countdownDisplay.classList.remove('hidden');
+    el.countdownDisplay.textContent = 'VAI!';
+    // So esconde o texto -- nao interfere em nada do gameplay, que ja
+    // comecou (ou esta prestes a comecar) via `match_started` por fora
+    // deste timer.
+    countdownHideTimeoutId = setTimeout(() => {
+      countdownHideTimeoutId = null;
+      hideCountdown();
+    }, COUNTDOWN_FINISHED_HIDE_MS);
   }
 
   function hideCountdown() {
+    clearCountdownHideTimeout();
     el.countdownDisplay.classList.add('hidden');
   }
 
@@ -330,6 +362,24 @@ const UIController = (() => {
     if (el.botDifficultyPanel) el.botDifficultyPanel.classList.add('hidden');
   }
 
+  /**
+   * ETAPA 15B: mostra o painel "Escolha a duração da partida" (ver
+   * client/index.html#match-duration-panel). Mesmo mecanismo exato de
+   * showBotDifficultySelection acima -- so alterna a classe `hidden`,
+   * nenhum elemento novo e criado/removido do DOM.
+   */
+  function showMatchDurationSelection() {
+    if (el.matchDurationPanel) el.matchDurationPanel.classList.remove('hidden');
+  }
+
+  /**
+   * ETAPA 15B: esconde o painel "Escolha a duração da partida", seja
+   * porque o jogador escolheu uma opcao ou porque cancelou.
+   */
+  function hideMatchDurationSelection() {
+    if (el.matchDurationPanel) el.matchDurationPanel.classList.add('hidden');
+  }
+
   const api = {
     setConnectionStatus,
     showRoomJoined,
@@ -351,6 +401,8 @@ const UIController = (() => {
     setBotMode,
     showBotDifficultySelection,
     hideBotDifficultySelection,
+    showMatchDurationSelection,
+    hideMatchDurationSelection,
   };
 
   if (isNode) {
