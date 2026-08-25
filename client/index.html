@@ -74,6 +74,39 @@
       </div>
     </section>
 
+    <!--
+      ETAPA 15B — selecao de duracao da partida. Aberta ANTES de
+      iniciar de fato uma partida Solo ou contra o Bot (ambas passam
+      por aqui: no Bot, depois de escolher a dificuldade acima; no
+      Solo, direto apos "Jogar Sozinho"). Modo Teste herda isso
+      automaticamente, ja que reaproveita o MESMO codigo/pipeline via
+      LocalServerSimulator (nenhuma tela nova para aquele modo).
+      Multiplayer real (Criar sala/Entrar na sala) NUNCA passa por
+      este painel -- o servidor ainda nao conhece nenhuma duracao
+      (ver Etapa 15A, que deliberadamente nao tocou em server/).
+
+      Escondido por padrao (mesmo padrao hidden/panel ja usado no
+      resto do lobby). As quatro opcoes so escolhem um IDENTIFICADOR
+      estavel ("30S"/"1M"/"5M"/"10M", ver
+      ClientConfig.MATCH_DURATION_IDS em client/js/config.js) --
+      nenhuma logica de encerramento de partida por tempo e criada
+      aqui (isso fica para uma proxima parte da Etapa 15). "Cancelar"
+      so fecha este painel e limpa a selecao, sem iniciar partida
+      nenhuma (ver client/js/main.js).
+    -->
+    <section id="match-duration-panel" class="panel hidden">
+      <h2>Escolha a duração da partida</h2>
+      <div class="actions">
+        <button id="btn-match-duration-30s" data-duration="30S">30 segundos</button>
+        <button id="btn-match-duration-1m" data-duration="1M">1 minuto</button>
+        <button id="btn-match-duration-5m" data-duration="5M">5 minutos</button>
+        <button id="btn-match-duration-10m" data-duration="10M">10 minutos</button>
+      </div>
+      <div class="actions">
+        <button id="btn-match-duration-cancel">Cancelar</button>
+      </div>
+    </section>
+
     <section id="room-info" class="panel hidden">
       <h2>Sala atual</h2>
       <p><strong>Codigo:</strong> <span id="room-code-display">-</span></p>
@@ -357,6 +390,7 @@
   <script src="js/match/matchController.js"></script>
   <script src="js/match/matchTimelineManager.js"></script>
   <script src="js/match/matchEndDetector.js"></script>
+  <script src="js/match/matchDuration.js"></script>
   <script src="js/match/matchResult.js"></script>
   <script src="js/match/rematchController.js"></script>
   <script src="js/match/matchAbandonmentController.js"></script>
