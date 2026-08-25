@@ -89,15 +89,19 @@ test('startMatchGameplay repassa o durationMs resolvido para BotMatchController.
   );
 });
 
-test('o MESMO resolvedMatchDurationMs (nao um segundo calculo) e usado tanto no Bot quanto no MatchEndDetector', () => {
+test('o MESMO resolvedMatchDurationMs (nao um segundo calculo) e usado no Bot, no MatchEndDetector e (desde a Etapa 16-2B) na timeline', () => {
   const resolveCalls = (startMatchGameplayBody.match(/MatchDuration\.resolveMatchDuration\(/g) || []).length;
   assert.strictEqual(resolveCalls, 1, 'MatchDuration.resolveMatchDuration deveria ser chamado uma UNICA vez');
 
+  // ETAPA 16-2B: MatchTimelineManager.ensureTimeline passou a receber o
+  // MESMO resolvedMatchDurationMs (ver tests/timelineDurationIntegration16_2B.test.js),
+  // entao a contagem esperada aqui subiu de 2 para 3 usos -- continua
+  // sendo o MESMO valor unico resolvido acima, nunca um segundo calculo.
   const botDurationUsages = (startMatchGameplayBody.match(/durationMs:\s*resolvedMatchDurationMs/g) || []).length;
   assert.strictEqual(
     botDurationUsages,
-    2,
-    'resolvedMatchDurationMs deveria ser passado exatamente duas vezes: para o Bot (createBotMatch) e para o MatchEndDetector'
+    3,
+    'resolvedMatchDurationMs deveria ser passado exatamente tres vezes: para a timeline (ensureTimeline), para o Bot (createBotMatch) e para o MatchEndDetector'
   );
 });
 
