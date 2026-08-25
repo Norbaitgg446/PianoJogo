@@ -45,6 +45,63 @@
   // sistema ja existente.
   let selectedBotDifficulty = null;
 
+  // ETAPA 15B: identificador da duracao escolhida pelo jogador na tela
+  // "Escolha a duração da partida" (aberta antes de iniciar Solo/Bot,
+  // ver botoes mais abaixo) -- um dos quatro valores estaveis de
+  // ClientConfig.MATCH_DURATION_IDS ("30S"/"1M"/"5M"/"10M", definidos
+  // na Etapa 15A). Mesmo padrao de estado PROPRIO de
+  // isBotMode/selectedBotDifficulty acima: nunca persistido (sem
+  // localStorage), comeca null, e definido quando o jogador escolhe
+  // uma das quatro opcoes, e limpo sempre que o jogador cancela essa
+  // selecao ou sai da sala/volta ao menu/inicia um multiplayer real.
+  // IMPORTANTE (Etapa 15B): esta etapa e SOMENTE selecao e
+  // armazenamento -- nenhuma partida termina mais cedo por causa
+  // deste valor ainda. Ele fica disponivel aqui para a proxima parte
+  // da Etapa 15 aplicar de fato (ver client/js/match/matchDuration.js).
+  let selectedMatchDuration = null;
+
+  // ETAPA 15C-MP — Parte 4: qual fluxo abriu a tela "Escolha a duração
+  // da partida" (mesmo painel reutilizado por Solo/Bot desde a Etapa
+  // 15B, ver `match-duration-panel` em client/index.html) -- um dos
+  // tres valores estaveis: 'solo', 'bot' ou 'multiplayer'. Estado
+  // PROPRIO (mesmo padrao de `selectedBotDifficulty`/
+  // `selectedMatchDuration` acima): nunca persistido, comeca `null`,
+  // e sempre limpo assim que o painel e fechado (opcao escolhida ou
+  // cancelamento) ou a sala e deixada. So decide O QUE FAZER quando o
+  // jogador escolhe uma das quatro opcoes do painel:
+  // - 'solo'/'bot': comportamento ja existente desde a Etapa 15B --
+  //   guarda a escolha em `selectedMatchDuration` (resolvida
+  //   localmente por MatchDuration.resolveMatchDuration) e envia
+  //   `start_solo_match`;
+  // - 'multiplayer': a sala JA existe (criada por "Criar Sala" antes
+  //   deste painel abrir) -- em vez de iniciar uma partida nova, so
+  //   envia `select_duration` pelo fluxo Multiplayer ja preparado
+  //   (Etapa 15C-MP — Parte 1), reutilizando o MESMO identificador
+  //   ("30S"/"1M"/"5M"/"10M"). A Match real so e criada quando a sala
+  //   ficar cheia (ver server/ws/messageRouter.js#handleJoinRoom),
+  //   nunca por uma mensagem enviada aqui -- e o servidor (nao este
+  //   cliente) quem resolve/transporta a duracao para os dois
+  //   jogadores (`match_ready`/`match.durationMs`, ja consumido em
+  //   startMatchGameplay).
+  let matchDurationSelectionContext = null;
+
+  // Debounce do "Jogar Novamente" no Solo/Bot/Modo Teste (item a
+  // corrigir nesta etapa): esses modos NAO passam pelo handshake de
+  // `rematchController` abaixo (nao ha oponente para negociar
+  // prontidao) -- o clique manda `start_solo_match` diretamente ao
+  // servidor. Sem nenhuma protecao, um duplo clique (ou um duplo
+  // disparo do evento de clique, comum em telas sensiveis ao toque)
+  // faz o MESMO handler rodar duas vezes: a primeira mensagem cria a
+  // partida nova normalmente, e a segunda chega ao servidor enquanto
+  // essa partida recem-criada ainda esta READY/COUNTDOWN/PLAYING (ver
+  // server/ws/messageRouter.js#handleStartSoloMatch), que rejeita com
+  // "Ja existe uma partida solo em andamento nesta sala." -- exatamente
+  // o erro relatado. Esta flag garante UM `start_solo_match` por
+  // partida terminada, o mesmo raciocinio que `rematchController` ja
+  // usa para o Multiplayer (ver `waitingForOpponent` em
+  // rematchController.js), sem inventar nenhum sistema de partida novo.
+  let soloRematchInFlight = false;
+
   // Engine de gameplay do jogador LOCAL (Etapa 5B-1). So existe uma
   // instancia aqui -- a deste navegador -- porque cada cliente so
   // controla o proprio jogador; o estado do oponente chega via
@@ -266,8 +323,17 @@
       // dispara handleLocalMatchEnd() na primeira vez que isso for
       // verdade -- chamadas seguintes (inclusive apos o loop ja ter sido
       // parado por dentro do proprio callback) nao fazem nada.
+      //
+      // ETAPA 15C-1C: passa getSyncedNow() -- o MESMO relogio
+      // sincronizado ja usado logo acima (processExpiredNotes) e pelo
+      // NoteRenderer -- para que o detector TAMBEM possa considerar a
+      // duracao maxima da partida (Etapa 15C-1B), sem nenhum relogio ou
+      // agendamento novo: este MESMO requestAnimationFrame (linha
+      // abaixo) e que ja decide o ritmo de tudo. Quando o detector foi
+      // criado sem duracao (ver startMatchGameplay), este argumento
+      // simplesmente nao tem efeito (comportamento antigo, so timeline).
       if (localMatchEndDetector) {
-        localMatchEndDetector.checkForEnd();
+        localMatchEndDetector.checkForEnd(getSyncedNow());
       }
 
       expiredNotesLoopId = requestAnimationFrame(loop);
@@ -446,6 +512,7 @@
 
     ResultRenderer.reset();
     rematchController.reset();
+    soloRematchInFlight = false;
     // Etapa 10D: mesmo motivo do reset acima -- a selecao pendente
     // desta partida ja foi consumida/descartada no servidor (ver
     // matchFlow/musicSelectionFlow), entao a UI local tambem nao deve
@@ -511,6 +578,7 @@
 
     ResultRenderer.reset();
     rematchController.reset();
+    soloRematchInFlight = false;
     matchAbandonmentController.reset();
     // Etapa 10D: o servidor ja limpa a selecao pendente da sala inteira
     // ao processar `leave_room` (ver leaveRoomFlow.js) -- a UI local
@@ -530,6 +598,17 @@
     // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
     // escolhida sobrevive a saida da sala.
     selectedBotDifficulty = null;
+    // ETAPA 15B: mesmo motivo -- nenhuma duracao escolhida sobrevive a
+    // saida da sala.
+    selectedMatchDuration = null;
+    // ETAPA 15C-MP — Parte 4: mesmo motivo -- o painel de duracao (se
+    // ainda estivesse aberto, ex: cancelamento pelo botao dedicado
+    // logo abaixo ja o fecha, mas isto cobre qualquer outro caminho de
+    // saida) nunca deve sobreviver a saida da sala, e nenhum contexto
+    // de uma tentativa anterior ("multiplayer" de uma sala que acabou
+    // de ser deixada) pode vazar para a proxima.
+    UIController.hideMatchDurationSelection();
+    matchDurationSelectionContext = null;
     UIController.resetToLobby();
     UIController.logMessage('Voce saiu da sala.');
   }
@@ -618,6 +697,9 @@
     UIController.setBotMode(false);
     botMatch = null;
     selectedBotDifficulty = null;
+    // ETAPA 15B: mesmo motivo -- nenhuma duracao escolhida numa
+    // partida anterior pode vazar para o proximo modo iniciado.
+    selectedMatchDuration = null;
     window.location.reload();
   });
 
@@ -639,6 +721,16 @@
     // anterior). O multiplayer continua usando rematchController
     // exatamente como antes.
     if (isSoloMode) {
+      // Mesma ideia de `rematchController.requestRematch()`: ignora
+      // cliques repetidos enquanto o pedido anterior ainda nao virou
+      // uma partida nova (ver comentario de `soloRematchInFlight`
+      // acima). `setPlayAgainWaiting(true, '')` desabilita o botao
+      // imediatamente (mesmo mecanismo ja usado pelo Multiplayer) sem
+      // mostrar a mensagem "Aguardando o outro jogador...", que nao
+      // faz sentido aqui (nao ha oponente).
+      if (soloRematchInFlight) return;
+      soloRematchInFlight = true;
+      ResultRenderer.setPlayAgainWaiting(true, '');
       SocketClient.send('start_solo_match');
       return;
     }
@@ -663,6 +755,22 @@
           roomState: message.room,
         });
         UIController.logMessage(`Sala criada: ${message.roomCode}`);
+        // ETAPA 15C-MP — Parte 4: `room_created` tambem e o mesmo
+        // evento que confirma uma sala nova criada por "Jogar
+        // Sozinho"/Bot (ver server/ws/messageRouter.js#handleStartSoloMatch),
+        // que ja escolheram a duracao ANTES de enviar `start_solo_match`
+        // (isSoloMode/isBotMode ja estao `true` nesse momento, ver os
+        // handlers de clique mais abaixo) -- para esses dois, o painel
+        // ja foi mostrado e fechado, e nao deve reabrir aqui. Somente
+        // o multiplayer real ("Criar Sala", sem nenhum dos dois modos
+        // ligado) ainda precisa da escolha, e so agora, com a sala de
+        // fato criada, e que faz sentido pedi-la -- reutilizando o
+        // MESMO painel (`showMatchDurationSelection`/
+        // `hideMatchDurationSelection`) que Solo/Bot ja usam.
+        if (!isSoloMode && !isBotMode) {
+          matchDurationSelectionContext = 'multiplayer';
+          UIController.showMatchDurationSelection();
+        }
         break;
 
       case 'room_joined':
@@ -777,6 +885,7 @@
         // estava resolvido -- devolve o controlador ao estado inicial
         // tambem aqui, pelo mesmo motivo do reset acima.
         rematchController.reset();
+        soloRematchInFlight = false;
         // Etapa 10D: mesmo motivo do reset acima -- se havia uma
         // selecao pendente para a Match que acabou de ser cancelada, a
         // UI local nao deve continuar mostrando-a como se fosse
@@ -903,6 +1012,22 @@
         // -- nenhum outro tipo de erro do projeto e afetado por isso.
         musicSelectionController.handleRejection(message.message);
         UIController.showError(message.message);
+
+        // CORRECAO "Jogar Novamente": se o servidor rejeitou um pedido
+        // de nova partida (Solo/Bot: `start_solo_match` respondido com
+        // "Ja existe uma partida solo em andamento"; Multiplayer:
+        // `rematch_ready` respondido com "Nao e possivel pedir revanche
+        // com uma partida em andamento", ex: o adversario ainda nao
+        // terminou a propria timeline), o botao precisa voltar a ficar
+        // clicavel -- sem isso ele ficava desabilitado PARA SEMPRE (nada
+        // mais o reabilitava), impedindo qualquer nova tentativa.
+        // rematchController.reset()/soloRematchInFlight=false sao
+        // seguros de chamar mesmo quando o erro nao tinha nada a ver com
+        // revanche (idempotente, mesmo racicionio de todo outro reset
+        // "amplo" ja usado neste arquivo, ex: handleMatchAbandoned).
+        rematchController.reset();
+        soloRematchInFlight = false;
+        ResultRenderer.setPlayAgainWaiting(false);
         break;
 
       default:
@@ -1008,6 +1133,7 @@
     // esta MESMA partida possa gerar um novo handshake de revanche
     // quando ela terminar (o handshake anterior ja foi resolvido).
     rematchController.reset();
+    soloRematchInFlight = false;
     // Etapa 8B: mesma logica -- esta e uma partida NOVA, entao o
     // controlador de abandono precisa poder tratar um abandono desta
     // partida normalmente (o de uma partida anterior, se algum, ja foi
@@ -1075,6 +1201,49 @@
       sendEvent: SocketClient.send,
     });
 
+    // ETAPA 15C-1C / 15C-1D: resolve o identificador escolhido pelo
+    // jogador (`selectedMatchDuration`, "30S"/"1M"/"5M"/"10M") para
+    // milissegundos usando EXCLUSIVAMENTE MatchDuration.resolveMatchDuration
+    // (Etapa 15A) + ClientConfig.MATCH_DURATION_MS -- nenhuma tabela
+    // nova, nenhum numero magico duplicado aqui. Sem selecao
+    // (`selectedMatchDuration` null/invalido -- caso do Multiplayer real
+    // e do Modo Teste, que nunca abrem o painel de duracao),
+    // `resolveMatchDuration` devolve o `fallbackMs` padrao (`null`),
+    // preservando 100% o comportamento antigo para esses dois modos.
+    //
+    // ETAPA 15C-1D: calculado ANTES do bloco do Bot logo abaixo (antes a
+    // Etapa 15C-1C calculava isso so depois, e zerava explicitamente
+    // para isBotMode) para que o MESMO valor resolvido possa ser
+    // repassado tanto a BotMatchController.createBotMatch quanto ao
+    // MatchEndDetector abaixo -- exatamente o padrao que o Solo ja usa
+    // (Etapa 15C-1C), agora tambem para o Bot. Multiplayer/Modo Teste
+    // continuam de fora: nenhum dos dois define `selectedMatchDuration`,
+    // entao `resolvedMatchDurationMs` continua `null` para eles.
+    //
+    // ETAPA 15C-MP — Parte 2: para o MULTIPLAYER REAL, a duracao passou
+    // a vir do SERVIDOR -- `message.match.durationMs`, ja resolvido la
+    // por matchFlow.js (Etapa 15C-MP — Parte 1), a partir da MESMA
+    // tabela/funcao (ClientConfig.MATCH_DURATION_MS/MatchDuration.
+    // resolveMatchDuration, so que rodando no servidor). Os DOIS
+    // jogadores recebem o MESMO `message.match` (broadcast identico do
+    // servidor), entao os dois calculam exatamente o mesmo
+    // `resolvedMatchDurationMs` aqui -- nenhuma segunda fonte de
+    // verdade. O `??` abaixo so entra em acao quando o valor calculado
+    // a partir de `selectedMatchDuration` for `null`; como Solo/Bot
+    // NUNCA definem `selectedMatchDuration` a partir de uma Match
+    // Multiplayer e o servidor NUNCA atribui `durationMs` a uma Match
+    // Solo/Bot (matchFlow.startMatchFlow so recebe `requestedDurationId`
+    // vindo do fluxo de sala cheia/revanche do Multiplayer real -- ver
+    // messageRouter.js/rematchFlow.js), as duas fontes sao mutuamente
+    // exclusivas por construcao: Solo/Bot continuam usando SOMENTE
+    // `selectedMatchDuration` (comportamento antigo, sem nenhuma
+    // mudanca), e o Multiplayer real passa a usar SOMENTE o valor do
+    // servidor (comportamento novo desta parte).
+    const resolvedMatchDurationMs = MatchDuration.resolveMatchDuration(
+      ClientConfig.MATCH_DURATION_MS,
+      selectedMatchDuration
+    ) ?? (typeof message.match.durationMs === 'number' ? message.match.durationMs : null);
+
     // ETAPA 14C/14D: cria o Bot desta partida SOMENTE quando isBotMode.
     // Reaproveita a MESMA instancia de `timeline` acima (nunca uma
     // copia/segunda geracao) e as MESMAS janelas/pontuacao/penalidades
@@ -1110,6 +1279,16 @@
         scoreValues: ClientConfig.SCORE_VALUES,
         comboMultiplierTiers: ClientConfig.COMBO_MULTIPLIER.TIERS,
         penalties: ClientConfig.PENALTIES,
+        // ETAPA 15C-1D: MESMO valor resolvido acima (resolvedMatchDurationMs),
+        // repassado adiante -- BotMatchController ja sabia armazenar
+        // este campo desde a Etapa 15A (PARTE 1), so ninguem preenchia
+        // com um valor de verdade ainda. Nao altera dificuldade/
+        // reactionTime/mistakeChance/judgement/PlayerState/score/combo:
+        // quem efetivamente encerra a partida por tempo continua sendo
+        // SOMENTE o localMatchEndDetector abaixo (ver item 4 do
+        // enunciado) -- o Bot so para de agir porque o loop inteiro para
+        // quando handleLocalMatchEnd roda, nunca por conta propria.
+        durationMs: resolvedMatchDurationMs,
       });
 
       // Area do Bot (Etapa 14C, item 7): reaproveita a MESMA estrutura
@@ -1134,9 +1313,35 @@
     // Criar de novo aqui, a cada partida, e o que garante o reset
     // correto entre partidas -- nao ha estado global "encerrado"
     // sobrando de uma partida anterior.
+    //
+    // ETAPA 15C-1C/15C-1D: `durationMs`/`startTime` agora tambem sao
+    // passados (ver matchEndDetector.js, Etapa 15C-1B). `startTime` e
+    // `message.startTimestamp` -- o MESMO timestamp, vindo do servidor,
+    // que ja monta a timeline acima (MatchTimelineManager.ensureTimeline)
+    // -- nunca um segundo relogio. `durationMs` e `resolvedMatchDurationMs`
+    // (calculado acima, ANTES do bloco do Bot, e reutilizado por ele) --
+    // o MESMO valor para Solo, Bot E, desde a ETAPA 15C-MP — Parte 2,
+    // tambem para o Multiplayer real (nesse caso vindo de
+    // `message.match.durationMs`, ja resolvido pelo servidor -- ver
+    // comentario acima). Quando `resolvedMatchDurationMs` e `null`
+    // (Modo Teste/Solo/Bot/Multiplayer sem nenhuma duracao configurada
+    // para aquela Match), o detector recebe `durationMs: null` e se
+    // comporta exatamente como antes (ver Etapa 15C-1B: sem os tres
+    // ingredientes, `hasReachedMatchDuration` sempre devolve `false`).
+    // Este UNICO detector encerra a partida local inteira, em QUALQUER
+    // modo (Solo, Bot e Multiplayer real rodam sob o MESMO
+    // GameplayEngine/loop do jogador humano) -- nenhuma segunda rotina
+    // de finalizacao para nenhum deles (ver item 4 do enunciado da
+    // Etapa 15C-1D/15C-MP — Parte 2): quando o limite e atingido,
+    // handleLocalMatchEnd() e chamado normalmente, que ja para
+    // startExpiredNotesLoop (o MESMO loop que chama BotMatchController.tick
+    // e processa notas expiradas do jogador humano em qualquer modo) --
+    // tudo simplesmente para de avancar, sem nenhum codigo novo por modo.
     localMatchEndDetector = MatchEndDetector.createMatchEndDetector({
       timeline,
       onMatchEnd: handleLocalMatchEnd,
+      durationMs: resolvedMatchDurationMs,
+      startTime: message.startTimestamp,
     });
 
     // Comeca a varrer a timeline em busca de notas expiradas (MISS),
@@ -1165,6 +1370,13 @@
     // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
     // escolhida antes sobrevive a uma sala de multiplayer real.
     selectedBotDifficulty = null;
+    // ETAPA 15C-MP — Parte 4: multiplayer real agora TAMBEM usa
+    // duracao (transportada pelo servidor, ver Etapa 15C-MP — Parte
+    // 1/2) -- mas a escolha e feita depois, quando `room_created`
+    // confirmar a sala nova (ver case 'room_created' abaixo), nunca
+    // com uma selecao de uma sala anterior.
+    selectedMatchDuration = null;
+    matchDurationSelectionContext = null;
     SocketClient.send('create_room');
   });
 
@@ -1182,6 +1394,15 @@
     botMatch = null;
     // ETAPA 14D — PARTE 2B: mesmo motivo do "Criar sala" acima.
     selectedBotDifficulty = null;
+    // ETAPA 15B: mesmo motivo do "Criar sala" acima.
+    selectedMatchDuration = null;
+    // ETAPA 15C-MP — Parte 4: quem ENTRA em uma sala nunca escolhe a
+    // duracao -- ela ja foi (ou sera) definida pelo criador da sala
+    // (ver matchDurationSelectionFlow.resolveSelectedDuration no
+    // servidor); este cliente so recebe o resultado via
+    // `match_ready`/`match.durationMs`, exatamente como ja acontece
+    // hoje. Nenhum contexto de painel e aberto aqui.
+    matchDurationSelectionContext = null;
     SocketClient.send('join_room', { roomCode });
   });
 
@@ -1203,7 +1424,14 @@
     // ETAPA 14D — PARTE 2B: mesmo motivo -- nenhuma dificuldade de Bot
     // escolhida antes sobrevive a uma partida Solo pura.
     selectedBotDifficulty = null;
-    SocketClient.send('start_solo_match');
+    // ETAPA 15B: a partir desta parte, o clique NAO inicia mais a
+    // partida diretamente -- so abre a tela "Escolha a duração da
+    // partida" (ver match-duration-panel em client/index.html). O
+    // envio da mensagem de rede que de fato inicia a partida continua
+    // sem acontecer ate o jogador escolher (ou cancelar) uma duracao
+    // logo abaixo -- mesmo padrao ja usado pela tela de dificuldade do
+    // Bot (Etapa 14D-2B).
+    UIController.showMatchDurationSelection();
   });
 
   // ETAPA 14C/14D: "Jogar contra Bot" -- botao SEPARADO de "Jogar
@@ -1233,7 +1461,13 @@
       selectedBotDifficulty = difficulty;
       UIController.setBotMode(true, difficulty);
       UIController.hideBotDifficultySelection();
-      SocketClient.send('start_solo_match');
+      // ETAPA 15B: a partir desta parte, escolher uma dificuldade NAO
+      // inicia mais a partida diretamente -- so abre, em seguida, a
+      // tela "Escolha a duração da partida" (ver match-duration-panel
+      // em client/index.html). O envio da mensagem de rede que de
+      // fato inicia a partida continua sem acontecer ate o jogador
+      // escolher (ou cancelar) uma duracao logo abaixo.
+      UIController.showMatchDurationSelection();
     });
   });
 
@@ -1247,6 +1481,97 @@
     UIController.setBotMode(false);
     botMatch = null;
     selectedBotDifficulty = null;
+  });
+
+  // ETAPA 15B: as quatro opcoes da tela "Escolha a duração da
+  // partida" (ver match-duration-panel em client/index.html), aberta
+  // pelos dois pontos de entrada acima ("Jogar Sozinho" e a escolha de
+  // dificuldade do Bot). Cada botao so le seu proprio `data-duration`
+  // ("30S"/"1M"/"5M"/"10M", ver ClientConfig.MATCH_DURATION_IDS em
+  // client/js/config.js) -- o MESMO identificador estavel que
+  // MatchDuration.resolveMatchDuration (Etapa 15A) ja sabe resolver,
+  // nenhuma conversao para outro sistema paralelo. So aceita um
+  // identificador VALIDO (presente em ClientConfig.MATCH_DURATION_MS)
+  // -- qualquer outro valor e ignorado silenciosamente, sem guardar
+  // nada nem iniciar partida.
+  //
+  // IMPORTANTE: esta etapa e SOMENTE selecao e armazenamento. Nenhum
+  // timer/encerramento por tempo e criado aqui -- `isSoloMode`/
+  // `isBotMode`/`selectedBotDifficulty` ja foram definidos por quem
+  // abriu este painel (o proprio clique so finalmente libera o envio
+  // de `start_solo_match`, reutilizando o MESMO pipeline de partida
+  // que Solo/Bot/Modo Teste ja usam).
+  // ETAPA 15C-MP — Parte 4: o mesmo clique agora se comporta de forma
+  // diferente dependendo de QUEM abriu o painel
+  // (`matchDurationSelectionContext`, definido pelos tres pontos de
+  // entrada: "Jogar Sozinho", escolha de dificuldade do Bot, ou
+  // `room_created` do multiplayer real acima) -- sem duplicar a
+  // validacao do `durationId` (continua exatamente a mesma para os
+  // dois casos, feita uma unica vez logo abaixo).
+  document.querySelectorAll('#match-duration-panel [data-duration]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const durationId = button.dataset.duration;
+      if (!Object.prototype.hasOwnProperty.call(ClientConfig.MATCH_DURATION_MS, durationId)) {
+        return;
+      }
+      UIController.hideMatchDurationSelection();
+
+      if (matchDurationSelectionContext === 'multiplayer') {
+        // A sala ja existe (criada por "Criar Sala" antes deste painel
+        // abrir, ver case 'room_created' acima) -- nenhuma partida e
+        // iniciada por este clique. So envia a escolha pelo fluxo
+        // Multiplayer ja preparado (`select_duration`, Etapa 15C-MP —
+        // Parte 1); o servidor confirma com `duration_selected` (ja
+        // logado, se quisermos, mas nenhum case novo e necessario aqui
+        // -- a duracao efetiva chega para os dois jogadores em
+        // `match_ready`/`match.durationMs` quando a sala ficar cheia).
+        // `selectedMatchDuration` (usado SOMENTE por Solo/Bot dentro de
+        // startMatchGameplay) permanece `null`, exatamente como ja
+        // documentado la.
+        UIController.logMessage(`Duracao selecionada: ${durationId}. Aguardando o oponente...`);
+        SocketClient.send('select_duration', { durationId });
+        matchDurationSelectionContext = null;
+        return;
+      }
+
+      selectedMatchDuration = durationId;
+      matchDurationSelectionContext = null;
+      SocketClient.send('start_solo_match');
+    });
+  });
+
+  // ETAPA 15B: "Cancelar" na tela "Escolha a duração da partida". So
+  // fecha o painel -- nenhuma partida e iniciada. Tambem desfaz
+  // qualquer modo otimisticamente ligado por quem abriu este painel
+  // (isSoloMode pelo clique em "Jogar Sozinho", ou isBotMode/
+  // selectedBotDifficulty pela escolha de dificuldade do Bot) --
+  // mesmo espirito do cancelamento da tela de dificuldade do Bot
+  // acima: nenhum estado de uma tentativa cancelada sobrevive.
+  document.getElementById('btn-match-duration-cancel').addEventListener('click', () => {
+    UIController.hideMatchDurationSelection();
+    // ETAPA 15C-MP — Parte 4: no contexto multiplayer a sala JA existe
+    // no servidor (criada por "Criar Sala" antes deste painel abrir,
+    // ver case 'room_created' acima) -- diferente de Solo/Bot (onde
+    // cancelar so desfaz um estado otimista local, sem nenhuma sala
+    // criada ainda). Cancelar aqui significa desistir da sala tambem,
+    // reutilizando o MESMO handshake ja usado pelo botao "Sair da
+    // sala" (leaveRoomController.requestLeave -- garante um unico
+    // `leave_room`, e handleLeftRoom, chamado quando o servidor
+    // confirmar, ja devolve a UI inteira ao lobby). Sem isso, a sala
+    // ficaria presa aguardando um oponente sem nenhuma forma de
+    // desistir dela.
+    const wasMultiplayer = matchDurationSelectionContext === 'multiplayer';
+    selectedMatchDuration = null;
+    matchDurationSelectionContext = null;
+    isSoloMode = false;
+    UIController.setSoloMode(false);
+    isBotMode = false;
+    UIController.setBotMode(false);
+    botMatch = null;
+    selectedBotDifficulty = null;
+    if (wasMultiplayer) {
+      leaveRoomController.requestLeave();
+    }
   });
 
   document.getElementById('btn-send-test').addEventListener('click', () => {
