@@ -106,13 +106,20 @@ test('main.js declara "isBotMode" como um estado PROPRIO (nao reaproveita isSolo
   assert.ok(/let isSoloMode = false;/.test(mainJsContent), 'isSoloMode precisa continuar existindo, inalterado');
 });
 
-test('clique em "Jogar Sozinho" nunca liga isBotMode (continua funcionando exatamente como antes)', () => {
+test('clique em "Jogar Sozinho" abre a selecao de duracao (ETAPA 15B) antes de iniciar, nunca liga isBotMode', () => {
   const soloHandlerBlock = extractBlock(
     /document\.getElementById\('btn-play-solo'\)\.addEventListener\('click', \(\) => \{[^]*?\n {2}\}\);/,
     'handler de btn-play-solo'
   );
   assert.ok(soloHandlerBlock.includes("isSoloMode = true"), 'Solo precisa continuar ligando isSoloMode');
-  assert.ok(soloHandlerBlock.includes("SocketClient.send('start_solo_match')"), 'Solo precisa continuar chamando start_solo_match');
+  assert.ok(
+    soloHandlerBlock.includes('UIController.showMatchDurationSelection()'),
+    'ETAPA 15B: o clique precisa abrir a tela "Escolha a duração da partida"'
+  );
+  assert.ok(
+    !soloHandlerBlock.includes("SocketClient.send('start_solo_match')"),
+    'ETAPA 15B: o clique em "Jogar Sozinho" NAO deve mais iniciar a partida diretamente -- isso agora acontece so ao escolher uma duracao'
+  );
   assert.ok(
     soloHandlerBlock.includes('isBotMode = false'),
     'o clique em "Jogar Sozinho" deve garantir isBotMode desligado (nunca liga-lo)'
