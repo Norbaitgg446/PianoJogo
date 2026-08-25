@@ -359,15 +359,21 @@ const ResultRenderer = (() => {
    * (via main.js), nunca este modulo.
    *
    * @param {boolean} isWaiting
+   * @param {string} [message] - texto mostrado enquanto `isWaiting` for
+   *   true (padrao: 'Aguardando o outro jogador...', o MESMO texto de
+   *   sempre -- nenhum chamador existente muda de comportamento). Passar
+   *   uma string vazia desabilita o botao sem mostrar nenhuma mensagem
+   *   -- usado pelo Solo/Bot/Modo Teste (ETAPA de correcao do "Jogar
+   *   Novamente"), onde nao ha oponente para "aguardar".
    */
-  function setPlayAgainWaiting(isWaiting) {
+  function setPlayAgainWaiting(isWaiting, message = 'Aguardando o outro jogador...') {
     const s = ensureResolved();
 
     if (s.els.btnPlayAgain) s.els.btnPlayAgain.disabled = !!isWaiting;
 
     if (s.els.rematchStatus) {
-      if (isWaiting) {
-        s.els.rematchStatus.textContent = 'Aguardando o outro jogador...';
+      if (isWaiting && message) {
+        s.els.rematchStatus.textContent = message;
         s.els.rematchStatus.classList.remove('hidden');
       } else {
         s.els.rematchStatus.textContent = '';
