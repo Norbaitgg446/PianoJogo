@@ -18,7 +18,18 @@ const ClientConfig = {
 
   // Atraso adicional (ms) somado ao startTimestamp antes da primeira nota,
   // para dar um pequeno "respiro" logo apos o fim da contagem regressiva.
-  NOTE_LEAD_IN_MS: 1000,
+  //
+  // ETAPA 15 — precisa ser >= NOTE_TRAVEL_MS (abaixo). Uma seta "nasce"
+  // visualmente em `note.time - NOTE_TRAVEL_MS` (ver NoteRenderer). Se
+  // NOTE_LEAD_IN_MS fosse menor que NOTE_TRAVEL_MS, a primeira nota
+  // teria `note.time - NOTE_TRAVEL_MS < startTimestamp`, ou seja, ela
+  // deveria comecar a cair ANTES do proprio inicio da partida -- mas
+  // NoteRenderer.start() (chamado em `match_started`) so comeca a
+  // desenhar a partir de startTimestamp, entao a seta aparecia ja
+  // "nascida" no meio do percurso, em vez de no topo da lane. Manter
+  // este valor igual a NOTE_TRAVEL_MS garante que a primeira nota nasce
+  // exatamente no topo no instante em que a partida comeca de verdade.
+  NOTE_LEAD_IN_MS: 1800,
 
   // Quanto tempo (ms) uma seta leva descendo do topo da lane ate o final
   // do percurso (note.time). Unica fonte de verdade deste numero: e usado
@@ -216,6 +227,35 @@ const ClientConfig = {
     EASY: { reactionTimeMs: 220, judgementOffsetMs: 40, mistakeChance: 0.35, seed: 1 },
     MEDIUM: { reactionTimeMs: 130, judgementOffsetMs: 10, mistakeChance: 0.12, seed: 1 },
     HARD: { reactionTimeMs: 60, judgementOffsetMs: 0, mistakeChance: 0.03, seed: 1 },
+  },
+
+  // ---- ETAPA 15A — Preparacao do sistema de duracao das partidas ----
+  // Apenas arquitetura/identificadores nesta parte: nenhuma partida
+  // termina mais cedo por causa disto ainda. A resolucao do identificador
+  // para milissegundos fica em client/js/match/matchDuration.js
+  // (MatchDuration.resolveMatchDuration), no mesmo espirito de
+  // BotController.createConfigForDifficulty acima -- nenhum modulo deve
+  // ler MATCH_DURATION_MS diretamente nem hardcode estes numeros em
+  // outro lugar.
+  //
+  // MATCH_DURATION_IDS -- identificadores estaveis (nunca o texto
+  // exibido na UI, que ainda nem existe -- esta parte nao cria nenhum
+  // botao/tela de selecao de duracao), no mesmo padrao ja usado por
+  // BOT_DIFFICULTY acima.
+  MATCH_DURATION_IDS: {
+    THIRTY_SECONDS: '30S',
+    ONE_MINUTE: '1M',
+    FIVE_MINUTES: '5M',
+    TEN_MINUTES: '10M',
+  },
+
+  // MATCH_DURATION_MS -- duracao (ms) correspondente a cada identificador
+  // acima, no mesmo padrao ja usado por BOT_DIFFICULTY_PRESETS.
+  MATCH_DURATION_MS: {
+    '30S': 30 * 1000,
+    '1M': 60 * 1000,
+    '5M': 5 * 60 * 1000,
+    '10M': 10 * 60 * 1000,
   },
 };
 
