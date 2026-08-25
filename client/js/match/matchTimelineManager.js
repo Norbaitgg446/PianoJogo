@@ -56,9 +56,27 @@ const MatchTimelineManager = (() => {
    *   (ver ClientConfig.DIFFICULTY_PROGRESSION.STAGES); este modulo
    *   continua sem saber nada sobre COMO a progressao funciona, so
    *   sobre QUANDO (re)gerar a timeline.
+   * @param {number} [options.durationMs] - ETAPA 16-2B: duracao (ms) que a
+   *   partida deve cobrir (o MESMO `resolvedMatchDurationMs` ja usado pelo
+   *   MatchEndDetector -- ver main.js). Quando informado e valido (numero
+   *   finito > 0), a timeline e gerada via
+   *   `NoteEngine.generateExtendedTimeline` (Etapa 16-2A), com notas
+   *   suficientes para cobrir essa duracao, repetindo ciclicamente o
+   *   mesmo padrao-base de sempre. Quando ausente/invalido, o
+   *   comportamento e EXATAMENTE o mesmo de antes desta etapa: timeline
+   *   gerada via `NoteEngine.generateNoteTimeline`, sem nenhuma extensao.
    * @returns {Array} a timeline ativa (nova ou ja existente) desta partida
    */
-  function ensureTimeline({ seed, startTimestamp, length, noteRange, noteIntervalMs, leadInMs, difficultyStages }) {
+  function ensureTimeline({
+    seed,
+    startTimestamp,
+    length,
+    noteRange,
+    noteIntervalMs,
+    leadInMs,
+    difficultyStages,
+    durationMs,
+  }) {
     const key = buildMatchKey(seed, startTimestamp);
 
     if (currentTimeline && currentMatchKey === key) {
@@ -66,18 +84,36 @@ const MatchTimelineManager = (() => {
       return currentTimeline;
     }
 
-    // Partida diferente da que estava ativa (ou nenhuma ativa ainda):
-    // gera exclusivamente via NoteEngine.generateNoteTimeline, sem
-    // nenhum gerador ou sistema de timeline alternativo.
-    currentTimeline = NoteEngineRef.generateNoteTimeline({
-      seed,
-      startTimestamp,
-      length,
-      noteRange,
-      noteIntervalMs,
-      leadInMs,
-      difficultyStages,
-    });
+    // ETAPA 16-2B: `durationMs` valido => usa a timeline estendida
+    // (Etapa 16-2A), que reaproveita a MESMA sequencia-base (checksum
+    // preservado) e so repete o padrao ciclicamente para cobrir a
+    // duracao. `durationMs` ausente/invalido (undefined/null/<=0,
+    // incluindo Modo Teste/Multiplayer sem duracao configurada) =>
+    // comportamento IDENTICO ao existente antes desta etapa: timeline-base
+    // normal via NoteEngine.generateNoteTimeline. Nenhum outro gerador ou
+    // sistema de timeline alternativo em nenhum dos dois caminhos.
+    const hasValidDuration = Number.isFinite(durationMs) && durationMs > 0;
+
+    currentTimeline = hasValidDuration
+      ? NoteEngineRef.generateExtendedTimeline({
+          seed,
+          startTimestamp,
+          length,
+          noteRange,
+          noteIntervalMs,
+          leadInMs,
+          difficultyStages,
+          durationMs,
+        })
+      : NoteEngineRef.generateNoteTimeline({
+          seed,
+          startTimestamp,
+          length,
+          noteRange,
+          noteIntervalMs,
+          leadInMs,
+          difficultyStages,
+        });
     currentMatchKey = key;
 
     return currentTimeline;
