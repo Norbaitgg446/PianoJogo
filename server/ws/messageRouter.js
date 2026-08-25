@@ -6,6 +6,7 @@ const gameplayFlow = require('../match/gameplayFlow');
 const rematchFlow = require('../match/rematchFlow');
 const leaveRoomFlow = require('../room/leaveRoomFlow');
 const musicSelectionFlow = require('../music/musicSelectionFlow');
+const matchDurationSelectionFlow = require('../match/matchDurationSelectionFlow');
 const { send, sendError, broadcastToRoom } = require('./broadcast');
 
 /**
@@ -90,11 +91,19 @@ function handleJoinRoom(ws, message) {
     // nada -> `null` -> matchFlow cai em DEFAULT_MUSIC_ID, exatamente
     // como antes desta etapa (Etapa 10C).
     const requestedMusicId = musicSelectionFlow.resolveSelectedMusicId(room.code);
-    matchFlow.startMatchFlow(room, requestedMusicId);
+    // ETAPA 15C-MP — Parte 1: mesma logica, agora tambem para a duracao
+    // (ver server/match/matchDurationSelectionFlow.js). Se nenhum dos
+    // jogadores selecionou uma duracao valida enquanto aguardava, cai em
+    // `null` -- matchFlow trata isso como "sem duracao configurada",
+    // exatamente o comportamento atual (nenhuma partida termina mais
+    // cedo por causa disto ainda).
+    const requestedDurationId = matchDurationSelectionFlow.resolveSelectedDuration(room.code);
+    matchFlow.startMatchFlow(room, requestedMusicId, undefined, requestedDurationId);
     // A selecao pendente ja foi consumida por esta Match -- nunca deve
     // ser reaproveitada automaticamente por uma Match futura (ex: uma
     // revanche) sem um novo pedido explicito do jogador.
     musicSelectionFlow.clearRoomSelection(room.code);
+    matchDurationSelectionFlow.clearRoomSelection(room.code);
   }
 }
 
@@ -320,6 +329,19 @@ function handleSelectMusicMessage(ws, message) {
 }
 
 /**
+ * type: 'select_duration', durationId: string (ETAPA 15C-MP — Parte 1)
+ * O jogador solicita uma duracao de partida para a PROXIMA Match
+ * Multiplayer da sala. Toda a validacao/registro/regra de dois
+ * jogadores vive em server/match/matchDurationSelectionFlow.js -- este
+ * handler so reconhece o tipo da mensagem e delega, mesmo padrao ja
+ * usado para `select_music`. NAO encerra nenhuma partida por tempo
+ * ainda -- so prepara o transporte da duracao ate a Match.
+ */
+function handleSelectDurationMessage(ws, message) {
+  matchDurationSelectionFlow.handleSelectDuration(ws, message);
+}
+
+/**
  * Ponto de entrada: recebe a mensagem crua (string) e distribui
  * para o handler correto com base no campo "type".
  */
@@ -354,6 +376,8 @@ function routeMessage(ws, raw) {
       return handleLeaveRoomMessage(ws);
     case 'select_music':
       return handleSelectMusicMessage(ws, message);
+    case 'select_duration':
+      return handleSelectDurationMessage(ws, message);
     default:
       return sendError(ws, `Tipo de mensagem desconhecido: ${message.type}`);
   }
