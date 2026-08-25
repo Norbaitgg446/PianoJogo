@@ -106,6 +106,33 @@ const InputController = (() => {
     const buttons = containerEl.querySelectorAll('[data-lane]');
     buttons.forEach((button) => {
       button.disabled = false;
+
+      // No celular, um toque real quase sempre tem um micro-movimento
+      // do dedo. Com touch-action:manipulation (CSS) o navegador ainda
+      // pode interpretar isso como um gesto de arrastar/rolar em vez de
+      // um tap, e nesse caso o evento 'click' sintetico as vezes nao
+      // chega a disparar -- e exatamente o sintoma "clico e nao
+      // acontece nada" que so aparece no celular. Ouvir 'touchend'
+      // diretamente e chamar preventDefault() resolve isso: reage ao
+      // toque no instante em que o dedo levanta (sem depender do click
+      // sintetico) e, ao mesmo tempo, cancela o click fantasma que o
+      // navegador dispararia logo em seguida -- entao a lane nunca e
+      // disparada duas vezes para o mesmo toque.
+      button.addEventListener(
+        'touchend',
+        (event) => {
+          event.preventDefault();
+          const lane = Number(button.dataset.lane);
+          if (!lane) return;
+          triggerLane(lane);
+        },
+        { passive: false }
+      );
+
+      // Mantido para mouse/teclado-acessivel (ex: Enter/Espaco em
+      // botao focado) e como fallback em navegadores onde touchend
+      // acima nao se aplica (ex: clique de mouse no proprio celular
+      // via mouse USB, ou testes automatizados que so simulam click).
       button.addEventListener('click', () => {
         const lane = Number(button.dataset.lane);
         if (!lane) return;
