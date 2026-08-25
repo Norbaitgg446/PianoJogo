@@ -101,18 +101,23 @@ function getAllSequenceIds() {
 // (mesmos valores ja usados hoje via TEST_SEQUENCE_LENGTH/TEST_NOTE_RANGE
 // e ClientConfig.NOTE_INTERVAL_MS/NOTE_LEAD_IN_MS, para nao mudar NENHUM
 // comportamento observavel de gameplay nesta etapa.)
+// ETAPA 15 — leadInMs elevado de 1000 para 1800 (= NOTE_TRAVEL_MS) em
+// AMBOS os padroes, pelo mesmo motivo documentado em
+// client/js/config.js#NOTE_LEAD_IN_MS: a primeira nota so pode comecar
+// a cair no topo da lane no instante em que a partida comeca de
+// verdade, nunca antes. Mantido identico ao client/js/music/sequenceCatalog.js.
 registerPattern('seq-basic-01', {
   length: 16,
   noteRange: 3,
   noteIntervalMs: 600,
-  leadInMs: 1000,
+  leadInMs: 1800,
 });
 
 registerPattern('seq-basic-02', {
   length: 24,
   noteRange: 3,
   noteIntervalMs: 500,
-  leadInMs: 1000,
+  leadInMs: 1800,
 });
 
 module.exports = {
