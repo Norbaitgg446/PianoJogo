@@ -225,33 +225,45 @@ const NoteRenderer = (() => {
     // a proxima).
     if (token !== renderToken || !activeTimeline) return;
 
-    const syncedNow = estimateSyncedNow(Date.now(), clockOffsetMs);
+    // ETAPA correcao mobile: todo o corpo do frame fica protegido por
+    // try/finally. Sem isso, qualquer excecao nao prevista (que pode
+    // depender de timing/navegador e so aparecer em certos celulares)
+    // interrompe a funcao NO MEIO e a linha que reagenda o proximo
+    // requestAnimationFrame (no final) nunca roda -- o loop inteiro
+    // morre silenciosamente e as notas ficam paradas na tela para
+    // sempre. Com o try/finally, um erro num frame vira so um log no
+    // console; o proximo frame continua normalmente.
+    try {
+      const syncedNow = estimateSyncedNow(Date.now(), clockOffsetMs);
 
-    for (const note of activeTimeline) {
-      const remove = shouldRemoveNote(note, syncedNow, hitWindowMs, REMOVE_BUFFER_MS, NoteEngineRef.isTerminal);
+      for (const note of activeTimeline) {
+        const remove = shouldRemoveNote(note, syncedNow, hitWindowMs, REMOVE_BUFFER_MS, NoteEngineRef.isTerminal);
 
-      if (remove) {
-        if (noteElements.has(note.id)) {
-          removeNoteElement(note.id);
+        if (remove) {
+          if (noteElements.has(note.id)) {
+            removeNoteElement(note.id);
+          }
+          continue;
         }
-        continue;
-      }
 
-      let els = noteElements.get(note.id);
-      if (!els) {
-        if (!shouldSpawnNote(note, syncedNow, NOTE_TRAVEL_MS, PRE_SPAWN_MS)) continue;
-        // Lane invalida (fora de 1..3): nunca cria elemento nenhum --
-        // e assim que garantimos que nenhuma nota aparece "na lane 4".
-        if (!laneTracksByPlayer[PLAYER_SLOTS[0]][note.lane]) continue;
-        els = createNoteElement(note);
-        noteElements.set(note.id, els);
-      }
+        let els = noteElements.get(note.id);
+        if (!els) {
+          if (!shouldSpawnNote(note, syncedNow, NOTE_TRAVEL_MS, PRE_SPAWN_MS)) continue;
+          // Lane invalida (fora de 1..3): nunca cria elemento nenhum --
+          // e assim que garantimos que nenhuma nota aparece "na lane 4".
+          if (!laneTracksByPlayer[PLAYER_SLOTS[0]][note.lane]) continue;
+          els = createNoteElement(note);
+          noteElements.set(note.id, els);
+        }
 
-      const topPercent = computeTopPercent(note, syncedNow, NOTE_TRAVEL_MS, HIT_LINE_PERCENT);
-      positionNoteElement(els, topPercent);
+        const topPercent = computeTopPercent(note, syncedNow, NOTE_TRAVEL_MS, HIT_LINE_PERCENT);
+        positionNoteElement(els, topPercent);
+      }
+    } catch (err) {
+      console.error('[NoteRenderer] erro num frame (ignorado, loop continua):', err);
+    } finally {
+      animationFrameId = requestAnimationFrame(() => tick(token));
     }
-
-    animationFrameId = requestAnimationFrame(() => tick(token));
   }
 
   /**
