@@ -403,6 +403,12 @@ const UIController = (() => {
     hideBotDifficultySelection,
     showMatchDurationSelection,
     hideMatchDurationSelection,
+    renderMusicOptions,
+    setSelectedMusic,
+    setMusicListDisabled,
+    setMusicSelectionStatus,
+    showMusicSelection,
+    hideMusicSelection,
   };
 
   if (isNode) {
