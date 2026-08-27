@@ -469,6 +469,65 @@ const NoteEngine = (() => {
     return timeline;
   }
 
+  /**
+   * ETAPA 19 — Escala a curva de dificuldade (ex:
+   * ClientConfig.DIFFICULTY_PROGRESSION.STAGES) para caber na duracao REAL
+   * da partida escolhida pelo jogador (30s/1m/5m/10m, ver
+   * ClientConfig.MATCH_DURATION_MS), em vez de sempre atingir o teto de
+   * velocidade dentro das primeiras ~16 notas (~10-15s) e ficar parada
+   * nesse teto pelo resto da partida -- comportamento que so fazia
+   * sentido quando as partidas nao tinham duracao selecionavel e sempre
+   * acabavam junto com o padrao-base (16/24 notas, ver
+   * sequenceCatalog.js).
+   *
+   * Continua sendo uma escala baseada em INDICE DE NOTA (nunca em tempo
+   * real/relogio) -- a MESMA fonte de determinismo ja usada por
+   * `resolveSpeedMultiplier` -- so os LIMIARES (`notesPlayed`) de cada
+   * estagio sao multiplicados por um fator, preservando:
+   *   - a MESMA ordem/quantidade de estagios de `baseStages`;
+   *   - os MESMOS `speedMultiplier` (nenhum teto novo, nenhuma curva nova,
+   *     ainda MAX_SPEED_MULTIPLIER);
+   *   - o primeiro estagio (`notesPlayed: 0`) sempre continua em 0.
+   *
+   * O fator de escala e `totalNotes / referenceNotes`, onde
+   * `referenceNotes` e o limiar do ULTIMO estagio de `baseStages` (hoje
+   * 16 -- o tamanho do padrao-base mais curto do catalogo, para o qual a
+   * curva original foi desenhada). Isso preserva o comportamento EXATO
+   * de antes desta etapa quando `totalNotes` for igual a
+   * `referenceNotes` (fator 1) -- ex: Modo Teste/Multiplayer sem duracao
+   * configurada, que continua chamando esta funcao com o proprio
+   * `baseStages` inalterado (ver main.js) -- e so estica/encolhe a curva
+   * proporcionalmente para qualquer outro `totalNotes`.
+   *
+   * Funcao PURA: nenhum relogio, nenhum DOM, mesma entrada sempre
+   * devolve a mesma saida (por isso os dois jogadores, calculando com o
+   * mesmo `totalNotes` a partir dos mesmos dados publicos da Match,
+   * sempre chegam na MESMA curva escalada). Nunca modifica `baseStages`
+   * (devolve um array NOVO).
+   *
+   * `baseStages` invalido/vazio, ou `totalNotes` invalido/<= 0, ou
+   * `referenceNotes` invalido/<= 0 => devolve `baseStages` sem
+   * alteracao (fallback seguro, equivalente a nao escalar nada).
+   *
+   * @param {Array<{notesPlayed:number, speedMultiplier:number}>} baseStages
+   * @param {number} totalNotes - quantidade total de notas da timeline desta partida
+   * @returns {Array<{notesPlayed:number, speedMultiplier:number}>}
+   */
+  function buildScaledDifficultyStages(baseStages, totalNotes) {
+    if (!Array.isArray(baseStages) || baseStages.length === 0) return baseStages;
+    if (!Number.isFinite(totalNotes) || totalNotes <= 0) return baseStages;
+
+    const referenceNotes = baseStages[baseStages.length - 1] && baseStages[baseStages.length - 1].notesPlayed;
+    if (!Number.isFinite(referenceNotes) || referenceNotes <= 0) return baseStages;
+
+    const scale = totalNotes / referenceNotes;
+
+    return baseStages.map((stage) => ({
+      notesPlayed: Math.round(stage.notesPlayed * scale),
+      speedMultiplier: stage.speedMultiplier,
+    }));
+  }
+
   const api = {
     NOTE_STATE,
     buildNoteId,
@@ -484,6 +543,8 @@ const NoteEngine = (() => {
     // direto, no mesmo espirito de resolveSpeedMultiplier acima.
     computeNoteCountForDuration,
     generateExtendedTimeline,
+    // ETAPA 19 — exposta para teste automatizado direto (funcao pura).
+    buildScaledDifficultyStages,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
