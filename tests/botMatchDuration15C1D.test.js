@@ -97,11 +97,20 @@ test('o MESMO resolvedMatchDurationMs (nao um segundo calculo) e usado no Bot, n
   // MESMO resolvedMatchDurationMs (ver tests/timelineDurationIntegration16_2B.test.js),
   // entao a contagem esperada aqui subiu de 2 para 3 usos -- continua
   // sendo o MESMO valor unico resolvido acima, nunca um segundo calculo.
+  //
+  // ETAPA 19: a mesma variavel agora TAMBEM alimenta a estimativa de
+  // quantas notas a duracao escolhida vai precisar
+  // (NoteEngine.computeNoteCountForDuration), usada para escalar
+  // ClientConfig.DIFFICULTY_PROGRESSION.STAGES proporcionalmente a
+  // duracao real da partida (ver NoteEngine.buildScaledDifficultyStages)
+  // -- a contagem sobe de 3 para 4, mas continua sendo o MESMO
+  // `resolvedMatchDurationMs` resolvido uma unica vez acima, nunca um
+  // segundo calculo de duracao.
   const botDurationUsages = (startMatchGameplayBody.match(/durationMs:\s*resolvedMatchDurationMs/g) || []).length;
   assert.strictEqual(
     botDurationUsages,
-    3,
-    'resolvedMatchDurationMs deveria ser passado exatamente tres vezes: para a timeline (ensureTimeline), para o Bot (createBotMatch) e para o MatchEndDetector'
+    4,
+    'resolvedMatchDurationMs deveria ser passado exatamente quatro vezes: para a estimativa de notas (computeNoteCountForDuration), para a timeline (ensureTimeline), para o Bot (createBotMatch) e para o MatchEndDetector'
   );
 });
 
