@@ -250,6 +250,23 @@
 
     function loop() {
       if (token !== expiredNotesLoopToken) return;
+      // Correcao mobile: o corpo inteiro do frame fica dentro de um
+      // try/finally. Sem isso, uma excecao inesperada no meio do frame
+      // (que pode depender de timing/navegador e so aparecer em certos
+      // celulares) impede a ultima linha (reagendar o proximo
+      // requestAnimationFrame) de rodar -- o loop inteiro morre
+      // silenciosamente: notas param de ser marcadas como perdidas e o
+      // jogo parece "travado" mesmo continuando a receber cliques/toques.
+      try {
+        runExpiredNotesFrame();
+      } catch (err) {
+        console.error('[main] erro no loop de notas expiradas (ignorado, loop continua):', err);
+      } finally {
+        expiredNotesLoopId = requestAnimationFrame(loop);
+      }
+    }
+
+    function runExpiredNotesFrame() {
       if (localGameplayEngine) {
         const newlyMissed = localGameplayEngine.processExpiredNotes(getSyncedNow(), ClientConfig.NOTE_HIT_WINDOW_MS);
 
@@ -335,8 +352,6 @@
       if (localMatchEndDetector) {
         localMatchEndDetector.checkForEnd(getSyncedNow());
       }
-
-      expiredNotesLoopId = requestAnimationFrame(loop);
     }
 
     expiredNotesLoopId = requestAnimationFrame(loop);
@@ -373,12 +388,30 @@
     // (Etapa 14B) -- o MESMO formato de MatchResult que o jogador
     // humano ja usa abaixo, guardado dentro do proprio `botMatch`
     // (BotMatchController.getResult).
-    if (isBotMode && botMatch) {
-      BotMatchController.finalize(botMatch);
-    }
+    //
+    // CORRECAO ETAPA 18: tudo o que so gera/exibe o resultado (bloco
+    // abaixo) agora fica dentro de um try/catch. Antes desta correcao,
+    // qualquer excecao neste trecho (ex: um elemento de UI inesperado)
+    // era engolida SILENCIOSAMENTE pelo try/catch generico do loop de
+    // animacao (ver startExpiredNotesLoop -- "erro no loop de notas
+    // expiradas (ignorado, loop continua)"), o que interrompia esta
+    // funcao NO MEIO: o MatchEndDetector ja tinha marcado a partida
+    // como encerrada (nao dispara de novo), mas o codigo de limpeza
+    // logo abaixo (NoteRenderer.stop/stopExpiredNotesLoop/
+    // InputController.setLaneHandler(null)/SocketClient.send(
+    // 'sequence_complete')) NUNCA rodava -- exatamente o sintoma
+    // relatado: as setas paravam de aparecer (a timeline realmente
+    // tinha acabado) mas a partida nunca "terminava de verdade" (sem
+    // tela de resultado, input continuava ligado, e o servidor nunca
+    // era avisado, travando inclusive a revanche). Agora a limpeza
+    // roda SEMPRE (bloco `finally` abaixo), erro ou nao.
+    try {
+      if (isBotMode && botMatch) {
+        BotMatchController.finalize(botMatch);
+      }
 
-    const timeline = MatchTimelineManager.getTimeline();
-    if (localPlayerState && timeline) {
+      const timeline = MatchTimelineManager.getTimeline();
+      if (localPlayerState && timeline) {
       const result = MatchResult.generateResult({ playerState: localPlayerState, timeline });
       console.log('[match_result]', result);
       UIController.logMessage(
@@ -433,23 +466,37 @@
       // a ficar visivel aqui.
       musicSelectionController.reset();
       UIController.showMusicSelection();
+      }
+    } catch (err) {
+      // CORRECAO ETAPA 18: nunca deixa este erro morrer silenciosamente
+      // dentro do try/catch generico do loop de animacao -- loga aqui,
+      // de forma explicita, exatamente o que quebrou ao montar/exibir
+      // o resultado. O `finally` abaixo garante que a partida termina
+      // de verdade (limpeza + aviso ao servidor) mesmo assim.
+      console.error('[match_end] erro ao gerar/exibir o resultado (partida encerra mesmo assim):', err);
+    } finally {
+      NoteRenderer.stop();
+      stopExpiredNotesLoop();
+      InputController.setLaneHandler(null);
+
+      // Etapa 12: avisa o servidor que a timeline local terminou. Isto e
+      // so um GATILHO (nenhum score/resultado e enviado aqui) para que o
+      // servidor chame o mesmo matchFlow.finishMatch ja existente e
+      // transicione a Match para FINISHED de verdade -- sem isso a Match
+      // ficava presa em PLAYING no servidor (mesmo com o resultado local
+      // ja visivel aqui) e a revanche nunca conseguia comecar. Ver
+      // gameplayFlow.applySequenceComplete no servidor para o restante
+      // do fluxo (idempotente: enviar isto mais de uma vez nao tem
+      // efeito depois da primeira, e handleLocalMatchEnd em si so roda
+      // uma vez por partida, ver MatchEndDetector).
+      //
+      // CORRECAO ETAPA 18: movido para dentro de um `finally` -- roda
+      // SEMPRE, mesmo se o bloco acima (geracao/exibicao do resultado)
+      // tiver lancado uma excecao. Isso e o que garante que o servidor
+      // sempre saiba que a partida acabou (nunca mais fica presa em
+      // PLAYING) e que o input/loop local sempre sejam desligados.
+      SocketClient.send('sequence_complete');
     }
-
-    NoteRenderer.stop();
-    stopExpiredNotesLoop();
-    InputController.setLaneHandler(null);
-
-    // Etapa 12: avisa o servidor que a timeline local terminou. Isto e
-    // so um GATILHO (nenhum score/resultado e enviado aqui) para que o
-    // servidor chame o mesmo matchFlow.finishMatch ja existente e
-    // transicione a Match para FINISHED de verdade -- sem isso a Match
-    // ficava presa em PLAYING no servidor (mesmo com o resultado local
-    // ja visivel aqui) e a revanche nunca conseguia comecar. Ver
-    // gameplayFlow.applySequenceComplete no servidor para o restante
-    // do fluxo (idempotente: enviar isto mais de uma vez nao tem
-    // efeito depois da primeira, e handleLocalMatchEnd em si so roda
-    // uma vez por partida, ver MatchEndDetector).
-    SocketClient.send('sequence_complete');
   }
 
   /**
@@ -966,18 +1013,34 @@
         );
         break;
 
-      case 'opponent_note_event':
-        // Apenas log textual (infra de comunicacao) — nenhuma interface
-        // visual de jogo ainda. A Etapa 4B ainda nao envia estes eventos
-        // sozinha (nao ha input de teclado no piano ainda); este handler
-        // existe para a comunicacao ja funcionar de ponta a ponta assim
-        // que a proxima etapa (interface visual) comecar a chamar
-        // GameplayEngine.handleKeyPress / processExpiredNotes.
+      case 'opponent_note_event': {
+        // ETAPA 19: alem do log, agora tambem refletimos o placar/combo
+        // do adversario na tela dele (`${opponentSlot}-score` /
+        // `${opponentSlot}-combo`, ja existentes no index.html — ver
+        // FeedbackRenderer). Ate aqui este handler so logava a mensagem
+        // e o placar do oponente ficava sempre zerado na tela, porque
+        // nada chamava FeedbackRenderer.updateScore/updateCombo para o
+        // slot dele. O servidor (gameplayFlow.js) ja manda `score` em
+        // note_hit e `combo` em ambos os eventos — so precisavamos usar
+        // esses campos aqui. Nenhum calculo novo de pontuacao/combo e
+        // feito no cliente: os valores vem prontos do servidor, fonte
+        // de verdade oficial (mesma logica ja usada para o jogador
+        // local).
         console.log('[opponent_note_event]', message);
+        const opponentSlot = message.slot;
+        if (opponentSlot) {
+          if (Number.isFinite(message.score)) {
+            FeedbackRenderer.updateScore(opponentSlot, message.score);
+          }
+          if (Number.isFinite(message.combo)) {
+            FeedbackRenderer.updateCombo(opponentSlot, message.combo);
+          }
+        }
         UIController.logMessage(
           `Oponente: ${message.event}${message.judgement ? ` (${message.judgement})` : ''} — combo ${message.combo}`
         );
         break;
+      }
 
       case 'rematch_player_ready':
         // Etapa 5B-5A (Parte 2): so log informativo -- o estado de
@@ -1169,6 +1232,44 @@
       selectedMatchDuration
     ) ?? (typeof message.match.durationMs === 'number' ? message.match.durationMs : null);
 
+    // ETAPA 19: a curva de dificuldade estatica (ClientConfig.
+    // DIFFICULTY_PROGRESSION.STAGES) foi desenhada para o padrao-base
+    // MAIS CURTO do catalogo (16 notas, ~10-15s) -- exatamente a duracao
+    // de uma partida ANTES de existir selecao de duracao. Com partidas
+    // de ate 10 minutos (Etapa 16-2B/generateExtendedTimeline repetindo
+    // o mesmo padrao ciclicamente), usar essa curva sem ajuste faz a
+    // velocidade atingir o teto (MAX_SPEED_MULTIPLIER) logo nas
+    // primeiras ~16 notas e ficar PARADA nesse teto pelo resto da
+    // partida, por mais longa que ela seja -- o mesmo comportamento
+    // "baixinho por muito tempo" (relativo a duracao real escolhida)
+    // que motivou esta etapa.
+    //
+    // Correcao: quando ha uma duracao de partida configurada
+    // (`resolvedMatchDurationMs`), primeiro estimamos quantas notas essa
+    // duracao vai exigir (NoteEngine.computeNoteCountForDuration, SEM
+    // estagios -- so uma estimativa em velocidade base, ja que os
+    // estagios que queremos calcular dependem dessa estimativa) e depois
+    // escalamos a curva original proporcionalmente a essa quantidade
+    // (NoteEngine.buildScaledDifficultyStages) -- MESMOS multiplicadores
+    // de sempre, so espalhados ao longo de toda a partida em vez de so
+    // do inicio. Sem duracao configurada (Modo Teste/Multiplayer/Solo/Bot
+    // sem selecao), `resolvedMatchDurationMs` e null e usamos a curva
+    // original sem nenhuma alteracao -- comportamento IDENTICO ao de
+    // antes desta etapa.
+    let timelineDifficultyStages = ClientConfig.DIFFICULTY_PROGRESSION.STAGES;
+    if (Number.isFinite(resolvedMatchDurationMs) && resolvedMatchDurationMs > 0) {
+      const estimatedTotalNotes = NoteEngine.computeNoteCountForDuration({
+        length: pattern.length,
+        noteIntervalMs: pattern.noteIntervalMs,
+        leadInMs: pattern.leadInMs,
+        durationMs: resolvedMatchDurationMs,
+      });
+      timelineDifficultyStages = NoteEngine.buildScaledDifficultyStages(
+        ClientConfig.DIFFICULTY_PROGRESSION.STAGES,
+        estimatedTotalNotes
+      );
+    }
+
     const timeline = MatchTimelineManager.ensureTimeline({
       seed: message.match.seed,
       startTimestamp: message.startTimestamp,
@@ -1176,12 +1277,13 @@
       noteRange: pattern.noteRange,
       noteIntervalMs: pattern.noteIntervalMs,
       leadInMs: pattern.leadInMs,
-      // ETAPA 13E: mesma configuracao centralizada para QUALQUER modo
+      // ETAPA 13E/19: mesma configuracao centralizada para QUALQUER modo
       // (Multiplayer/Solo/Teste) -- startMatchGameplay e o UNICO ponto
       // de entrada que monta a timeline em todos eles, entao nenhum
       // modo pode ficar com um comportamento de dificuldade diferente
-      // dos outros por acidente.
-      difficultyStages: ClientConfig.DIFFICULTY_PROGRESSION.STAGES,
+      // dos outros por acidente. Agora escalada pela duracao real da
+      // partida (ver comentario acima) quando houver uma configurada.
+      difficultyStages: timelineDifficultyStages,
       // ETAPA 16-2B: MESMO `resolvedMatchDurationMs` usado pelo
       // MatchEndDetector abaixo (ver bloco do Bot/MatchEndDetector) --
       // nenhuma segunda fonte de duracao. Quando `null` (Modo
